@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>Pagamento PIX</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+    <div class="container">
+        <h1>Pagamento PIX</h1>
+        <p>Escaneie o QR Code abaixo para pagar:</p>
+        <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" />
+        <p>Código PIX para copiar:</p>
+        <textarea readonly class="pix-code" id="pixCode">{{PIX_CODE}}</textarea>
+        <button onclick="copyPixCode()">Copiar Código</button>
+    </div>
+    <script>
+        function copyPixCode() {
+            const pixCode = document.getElementById('pixCode');
+            pixCode.select();
+            document.execCommand('copy');
+            alert('Código PIX copiado!');
+        }
+
+        btn.addEventListener('click', async () => {
+  status.textContent = 'Gerando…';
+  linkPIX.textContent = '';
+
+  try {
+    const res = await fetch('/api/gerar_cobranca', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw data;      // aqui lançamos o JSON de erro
+    // … código de sucesso …
+  } catch (err) {
+    // <— É aqui que entra o novo “catch”
+    if (err.detail) {
+      status.textContent = `❌ ${err.detail.httpMessage || err.detail}`;
+      console.error(err.detail);
+    } else {
+      status.textContent = '❌ ' + (err.error || err);
+      console.error(err);
+    }
+  }
+});
+
+    </script>
+</body>
+</html>
