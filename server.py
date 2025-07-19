@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import requests, qrcode, os, json, uuid
 
 # Certificado e endpoints
@@ -153,6 +153,21 @@ def webhook():
     # salvar_pagamento_confirmado(txid, valor, status)
 
     return jsonify({"status": "ok"}), 200
+
+@app.route('/webhook-pix', methods=['POST'])
+def webhook_pix():
+    data = request.json
+    txid = data.get('txid')
+    status = data.get('status')
+    pagador = data.get('pagador', {})
+    nome = pagador.get('nome')
+    cpf = pagador.get('cpf')
+
+    if status == 'CONCLUIDA':
+        print(f"Cobrança {txid} foi paga por {nome} (CPF: {cpf})")
+        # Aqui você pode salvar o status no banco ou arquivo
+
+    return '', 200
 
 
 if __name__=="__main__":
