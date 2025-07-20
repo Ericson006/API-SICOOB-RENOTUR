@@ -5,56 +5,49 @@
     <title>Pagamento PIX</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <style>
-        .qrcode {
-            width: 250px;
-            height: 250px;
-            transition: filter 0.3s ease;
-            position: relative;
-        }
-        .blur {
-            filter: blur(5px);
-        }
-        .checkmark {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 6rem;
-            color: green;
-            pointer-events: none;
-        }
-        .qrcode-container {
-            position: relative;
-            display: inline-block;
-        }
-        .confirm-message {
-            margin-top: 1rem;
-            font-size: 1.2rem;
-            color: green;
-            font-weight: bold;
-        }
+      /* Estilo para embaçar o QR code após pagamento */
+      .blurred {
+        filter: blur(5px);
+        pointer-events: none; /* evita interação com o QR code */
+      }
+      /* Check verde em cima do QR */
+      .checkmark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 4rem;
+        color: green;
+        pointer-events: none;
+      }
+      .qr-container {
+        position: relative;
+        display: inline-block;
+      }
+      .message-confirmed {
+        margin-top: 1rem;
+        color: green;
+        font-weight: bold;
+        font-size: 1.2rem;
+      }
     </style>
 </head>
 <body>
-    <div class="container" style="text-align:center;">
+    <div class="container">
         <h1>Pagamento PIX</h1>
         <p>Escaneie o QR Code abaixo para pagar:</p>
-        
-        <div class="qrcode-container" id="qrcodeContainer">
-            <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" id="qrCodeImg" />
-            <!-- Aqui vai aparecer o check quando pago -->
+        <div class="qr-container">
+          <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
+          <div id="checkmark" class="checkmark" style="display:none;">✔️</div>
         </div>
-
         <p>Código PIX para copiar:</p>
-        <textarea readonly class="pix-code" id="pixCode" style="width: 250px; height: 80px;">{{PIX_CODE}}</textarea>
-        <br />
+        <textarea readonly class="pix-code" id="pixCode">{{PIX_CODE}}</textarea>
         <button onclick="copyPixCode()">Copiar Código</button>
 
-        <div id="confirmMessage" class="confirm-message" style="display:none;">
-            Pagamento confirmado! Obrigado.
+        <div id="payment-status" class="message-confirmed" style="display:none;">
+          Pagamento confirmado! Obrigado.
         </div>
     </div>
-
     <script>
         function copyPixCode() {
             const pixCode = document.getElementById('pixCode');
@@ -63,40 +56,30 @@
             alert('Código PIX copiado!');
         }
 
-        const txid = "{{ request.path.split('/')[-1] }}"; // pega o txid da url
-
-        async function checkPagamento() {
+        // Função que consulta status do pagamento via API
+        async function checkStatus() {
             try {
-                const res = await fetch(`/status/${txid}`);
+                const txid = "{{ request.path.split('/')[-1] }}"; // Pega o txid da URL
+                const res = await fetch(`/api/status/${txid}`);
                 if (!res.ok) throw new Error('Erro ao consultar status');
                 const data = await res.json();
                 if (data.status === "CONCLUIDA") {
-                    // Embaçar o QR code e mostrar check + mensagem
-                    const qrCodeImg = document.getElementById('qrCodeImg');
-                    qrCodeImg.classList.add('blur');
-
-                    const container = document.getElementById('qrcodeContainer');
-                    if (!document.getElementById('checkmarkIcon')) {
-                        const check = document.createElement('div');
-                        check.id = 'checkmarkIcon';
-                        check.className = 'checkmark';
-                        check.innerHTML = '✔️';
-                        container.appendChild(check);
-                    }
-
-                    document.getElementById('confirmMessage').style.display = 'block';
-                    clearInterval(pollInterval); // para de ficar consultando
+                    // Atualiza a UI: embaça QR, mostra check e mensagem
+                    document.getElementById('qrcode-img').classList.add('blurred');
+                    document.getElementById('checkmark').style.display = 'block';
+                    document.getElementById('payment-status').style.display = 'block';
+                    // Para de consultar após confirmação
+                    clearInterval(polling);
                 }
-            } catch (error) {
-                console.error(error);
+            } catch (e) {
+                console.error("Erro ao consultar status:", e);
             }
         }
 
-        // Checa o status a cada 5 segundos
-        const pollInterval = setInterval(checkPagamento, 5000);
-
-        // Checa uma vez na carga inicial da página
-        checkPagamento();
+        // Inicia polling a cada 1 segundo (1000ms)
+        const polling = setInterval(checkStatus, 1000);
+        // Checa uma vez imediatamente
+        checkStatus();
     </script>
 </body>
 </html>
