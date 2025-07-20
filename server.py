@@ -171,6 +171,8 @@ def webhook_pix():
 
     return '', 200
 
-
-if __name__=="__main__":
-    app.run(debug=True)
+# Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
+if __name__ == '__main__':
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Padrão 5000 localmente, mas Render sobrescreve
+    app.run(host='0.0.0.0', port=port, debug=True)
