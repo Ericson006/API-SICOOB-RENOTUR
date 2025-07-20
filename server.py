@@ -14,6 +14,9 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 os.makedirs("cobrancas", exist_ok=True)
 os.makedirs("static/qrcodes", exist_ok=True)
 
+STATUS_DIR = "status_pagamentos"
+os.makedirs(STATUS_DIR, exist_ok=True)
+
 def get_access_token():
     resp = requests.post(
         TOKEN_URL,
@@ -131,43 +134,39 @@ def pix_page(txid):
     try:
         with open(f"cobrancas/{txid}.json","r",encoding="utf-8") as f:
             dados = json.load(f)
-        return render_template(
-            "pix_template.html",
-            QRCODE_IMG=dados["qrcode_img"],
-            PIX_CODE=dados["pix_copia_cola"]
-        )
     except FileNotFoundError:
         return "Cobrança não encontrada",404
+
+    status = "PENDENTE"
+    try:
+        with open(f"{STATUS_DIR}/{txid}.json", "r", encoding="utf-8") as f:
+            status_data = json.load(f)
+            status = status_data.get("status", "PENDENTE")
+    except FileNotFoundError:
+        pass  # Se não houver status, assume pendente
+
+    return render_template(
+        "pix_template.html",
+        QRCODE_IMG=dados["qrcode_img"],
+        PIX_CODE=dados["pix_copia_cola"],
+        STATUS=status
+    )
     
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
     print("🔔 Webhook recebido:", data)
 
-    # Aqui você pode processar os dados recebidos, por exemplo:
     txid = data.get("txid")
-    valor = data.get("valor", {}).get("original")
     status = data.get("status")
 
-    # Exemplo: salvar confirmação em um banco de dados ou marcar como pago
-    # salvar_pagamento_confirmado(txid, valor, status)
+    if not txid:
+        return jsonify({"error": "txid missing"}), 400
+
+    with open(f"{STATUS_DIR}/{txid}.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
 
     return jsonify({"status": "ok"}), 200
-
-@app.route('/webhook-pix', methods=['POST'])
-def webhook_pix():
-    data = request.json
-    txid = data.get('txid')
-    status = data.get('status')
-    pagador = data.get('pagador', {})
-    nome = pagador.get('nome')
-    cpf = pagador.get('cpf')
-
-    if status == 'CONCLUIDA':
-        print(f"Cobrança {txid} foi paga por {nome} (CPF: {cpf})")
-        # Aqui você pode salvar o status no banco ou arquivo
-
-    return '', 200
 
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
