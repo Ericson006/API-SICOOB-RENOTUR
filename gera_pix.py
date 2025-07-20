@@ -1,9 +1,8 @@
 import requests
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-CERT_FILE = os.path.join(BASE_DIR, "certs", "certificado.pem")
-KEY_FILE  = os.path.join(BASE_DIR, "certs", "chave-privada.pem")
+#certificados armazenados no secret files do render
+CERT_FILE = "/etc/secrets/certificado.pem"
+KEY_FILE = "/etc/secrets/chave-privada.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL   = "https://api.sicoob.com.br/pix/api/v2/cob"
