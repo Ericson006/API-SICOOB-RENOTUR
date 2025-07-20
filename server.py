@@ -115,7 +115,6 @@ def api_gerar_cobranca():
             "link_pix": f"/pix/{txid}"
         })
 
-
     except requests.exceptions.HTTPError as http_err:
         resp = http_err.response
         try:
@@ -167,6 +166,16 @@ def webhook():
         json.dump(data, f, ensure_ascii=False)
 
     return jsonify({"status": "ok"}), 200
+
+@app.route("/api/status/<txid>")
+def api_status(txid):
+    try:
+        with open(f"{STATUS_DIR}/{txid}.json", "r", encoding="utf-8") as f:
+            status_data = json.load(f)
+        status = status_data.get("status", "PENDENTE")
+        return jsonify({"status": status})
+    except FileNotFoundError:
+        return jsonify({"status": "NAO_ENCONTRADO"}), 404
 
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
