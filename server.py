@@ -149,7 +149,7 @@ def pix_page(txid):
         QRCODE_IMG=dados["qrcode_img"],
         PIX_CODE=dados["pix_copia_cola"],
         STATUS=status,
-        TXID=txid  # <--- adiciona esta linha
+        TXID=txid  # <--- esta linha adicionada para frontend
     )
     
 @app.route("/webhook", methods=["POST"])
