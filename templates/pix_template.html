@@ -5,12 +5,10 @@
     <title>Pagamento PIX</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <style>
-      /* Estilo para embaçar o QR code após pagamento */
       .blurred {
         filter: blur(5px);
-        pointer-events: none; /* evita interação com o QR code */
+        pointer-events: none;
       }
-      /* Check verde em cima do QR */
       .checkmark {
         position: absolute;
         top: 50%;
@@ -37,17 +35,18 @@
         <h1>Pagamento PIX</h1>
         <p>Escaneie o QR Code abaixo para pagar:</p>
         <div class="qr-container">
-          <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
+          <img src="{{ QRCODE_IMG }}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
           <div id="checkmark" class="checkmark" style="display:none;">✔️</div>
         </div>
         <p>Código PIX para copiar:</p>
-        <textarea readonly class="pix-code" id="pixCode">{{PIX_CODE}}</textarea>
+        <textarea readonly class="pix-code" id="pixCode">{{ PIX_CODE }}</textarea>
         <button onclick="copyPixCode()">Copiar Código</button>
 
         <div id="payment-status" class="message-confirmed" style="display:none;">
           Pagamento confirmado! Obrigado.
         </div>
     </div>
+
     <script>
         function copyPixCode() {
             const pixCode = document.getElementById('pixCode');
@@ -56,19 +55,17 @@
             alert('Código PIX copiado!');
         }
 
-        // Função que consulta status do pagamento via API
+        const txid = "{{ TXID }}";
+
         async function checkStatus() {
             try {
-                const txid = "{{ request.path.split('/')[-1] }}"; // Pega o txid da URL
                 const res = await fetch(`/api/status/${txid}`);
                 if (!res.ok) throw new Error('Erro ao consultar status');
                 const data = await res.json();
                 if (data.status === "CONCLUIDA") {
-                    // Atualiza a UI: embaça QR, mostra check e mensagem
                     document.getElementById('qrcode-img').classList.add('blurred');
                     document.getElementById('checkmark').style.display = 'block';
                     document.getElementById('payment-status').style.display = 'block';
-                    // Para de consultar após confirmação
                     clearInterval(polling);
                 }
             } catch (e) {
@@ -76,9 +73,7 @@
             }
         }
 
-        // Inicia polling a cada 1 segundo (1000ms)
         const polling = setInterval(checkStatus, 1000);
-        // Checa uma vez imediatamente
         checkStatus();
     </script>
 </body>
