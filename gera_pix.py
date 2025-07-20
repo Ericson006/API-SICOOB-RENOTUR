@@ -1,7 +1,7 @@
 import requests
 
-CERT_FILE = r"C:\Users\miran\OneDrive\Área de Trabalho\certificado.pem"
-KEY_FILE  = r"C:\Users\miran\OneDrive\Área de Trabalho\chave-privada-sem-senha.pem"
+CERT_FILE = "certs/certificado.pem"
+KEY_FILE  = "certs/chave-privada.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL   = "https://api.sicoob.com.br/pix/api/v2/cob"
