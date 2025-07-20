@@ -4,16 +4,57 @@
     <meta charset="UTF-8" />
     <title>Pagamento PIX</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <style>
+        .qrcode {
+            width: 250px;
+            height: 250px;
+            transition: filter 0.3s ease;
+            position: relative;
+        }
+        .blur {
+            filter: blur(5px);
+        }
+        .checkmark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 6rem;
+            color: green;
+            pointer-events: none;
+        }
+        .qrcode-container {
+            position: relative;
+            display: inline-block;
+        }
+        .confirm-message {
+            margin-top: 1rem;
+            font-size: 1.2rem;
+            color: green;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" style="text-align:center;">
         <h1>Pagamento PIX</h1>
         <p>Escaneie o QR Code abaixo para pagar:</p>
-        <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" />
+        
+        <div class="qrcode-container" id="qrcodeContainer">
+            <img src="{{QRCODE_IMG}}" alt="QR Code PIX" class="qrcode" id="qrCodeImg" />
+            <!-- Aqui vai aparecer o check quando pago -->
+        </div>
+
         <p>Código PIX para copiar:</p>
-        <textarea readonly class="pix-code" id="pixCode">{{PIX_CODE}}</textarea>
+        <textarea readonly class="pix-code" id="pixCode" style="width: 250px; height: 80px;">{{PIX_CODE}}</textarea>
+        <br />
         <button onclick="copyPixCode()">Copiar Código</button>
+
+        <div id="confirmMessage" class="confirm-message" style="display:none;">
+            Pagamento confirmado! Obrigado.
+        </div>
     </div>
+
     <script>
         function copyPixCode() {
             const pixCode = document.getElementById('pixCode');
@@ -22,27 +63,40 @@
             alert('Código PIX copiado!');
         }
 
-        btn.addEventListener('click', async () => {
-  status.textContent = 'Gerando…';
-  linkPIX.textContent = '';
+        const txid = "{{ request.path.split('/')[-1] }}"; // pega o txid da url
 
-  try {
-    const res = await fetch('/api/gerar_cobranca', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw data;      // aqui lançamos o JSON de erro
-    // … código de sucesso …
-  } catch (err) {
-    // <— É aqui que entra o novo “catch”
-    if (err.detail) {
-      status.textContent = `❌ ${err.detail.httpMessage || err.detail}`;
-      console.error(err.detail);
-    } else {
-      status.textContent = '❌ ' + (err.error || err);
-      console.error(err);
-    }
-  }
-});
+        async function checkPagamento() {
+            try {
+                const res = await fetch(`/status/${txid}`);
+                if (!res.ok) throw new Error('Erro ao consultar status');
+                const data = await res.json();
+                if (data.status === "CONCLUIDA") {
+                    // Embaçar o QR code e mostrar check + mensagem
+                    const qrCodeImg = document.getElementById('qrCodeImg');
+                    qrCodeImg.classList.add('blur');
 
+                    const container = document.getElementById('qrcodeContainer');
+                    if (!document.getElementById('checkmarkIcon')) {
+                        const check = document.createElement('div');
+                        check.id = 'checkmarkIcon';
+                        check.className = 'checkmark';
+                        check.innerHTML = '✔️';
+                        container.appendChild(check);
+                    }
+
+                    document.getElementById('confirmMessage').style.display = 'block';
+                    clearInterval(pollInterval); // para de ficar consultando
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // Checa o status a cada 5 segundos
+        const pollInterval = setInterval(checkPagamento, 5000);
+
+        // Checa uma vez na carga inicial da página
+        checkPagamento();
     </script>
 </body>
 </html>
