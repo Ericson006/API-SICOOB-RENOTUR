@@ -4,7 +4,6 @@ import requests
 import qrcode
 import uuid
 from supabase import create_client, Client
-from datetime import datetime
 
 # Certificados armazenados no secret files do render
 CERT_FILE = "/etc/secrets/certificado.pem"
@@ -13,9 +12,9 @@ CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
 
-# Configurações Supabase (definidas nas variáveis de ambiente do Render ou local)
+# Configurações Supabase (variáveis de ambiente)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # chave correta
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 print("SUPABASE_URL:", SUPABASE_URL)
 print("SUPABASE_KEY:", (SUPABASE_KEY[:6] + "...") if SUPABASE_KEY else None)
@@ -49,24 +48,18 @@ def index():
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
-        data = request.get_json() or {}
-
-        # Pega valor enviado, padrão 140.00 se não enviado ou inválido
-        valor_str = str(data.get("valor", "140.00")).replace(",", ".").strip()
-        try:
-            valor_float = float(valor_str)
-            if valor_float <= 0:
-                raise ValueError()
-        except ValueError:
-            return jsonify({"error": "Valor inválido. Deve ser número positivo."}), 400
+        # Recebe JSON com valor, se enviado; senão usa padrão
+        dados = request.get_json(silent=True) or {}
+        valor = dados.get("valor", "140.00")
+        solicitacao = dados.get("solicitacao", "Pagamento referente a compra da passagem")
 
         token = get_access_token()
         txid = uuid.uuid4().hex.upper()[:32]
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": f"{valor_float:.2f}"},
+            "valor": {"original": str(valor)},
             "chave": "04763318000185",
-            "solicitacaoPagador": "Pagamento referente a compra da passagem",
+            "solicitacaoPagador": solicitacao,
             "txid": txid
         }
         resp = requests.post(
@@ -83,17 +76,18 @@ def api_gerar_cobranca():
         img_path = f"static/qrcodes/{txid}.png"
         img.save(img_path)
 
-        # Insere no Supabase com created_at em ISO string
+        # Inserir no Supabase, tratando erros com raise_for_status()
         result = supabase.table("cobrancas").insert({
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
-            "valor": valor_float,
-            "created_at": datetime.utcnow().isoformat()
+            "valor": valor,
+            "chave_pix": "04763318000185",
         }).execute()
-
-        if result.error:
-            print("Erro ao inserir cobrança:", result.error)
+        try:
+            result.raise_for_status()
+        except Exception as e:
+            print("Erro ao inserir cobrança:", e)
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
@@ -111,7 +105,13 @@ def api_gerar_cobranca():
 @app.route("/pix/<txid>")
 def pix_page(txid):
     res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
-    if res.error or res.data is None:
+    try:
+        res.raise_for_status()
+    except Exception as e:
+        print("Erro ao buscar cobrança:", e)
+        return "Erro ao buscar cobrança", 500
+
+    if not res.data:
         return "Cobrança não encontrada", 404
 
     dados = res.data
@@ -122,14 +122,20 @@ def pix_page(txid):
         QRCODE_IMG=qrcode_img,
         PIX_CODE=dados["brcode"],
         STATUS=dados.get("status", "PENDENTE"),
-        VALOR=dados.get("valor", 0.0),
-        TXID=txid
+        TXID=txid,
+        VALOR=dados.get("valor", "0.00")
     )
 
 @app.route("/api/status/<txid>")
 def api_status(txid):
     res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
-    if res.error or res.data is None:
+    try:
+        res.raise_for_status()
+    except Exception as e:
+        print("Erro ao buscar status:", e)
+        return jsonify({"status": "ERRO"}), 500
+
+    if not res.data:
         return jsonify({"status": "NAO_ENCONTRADO"}), 404
     return jsonify({"status": res.data["status"]})
 
@@ -145,9 +151,10 @@ def webhook_pix():
         return jsonify({"error": "txid ausente"}), 400
 
     result = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-
-    if result.error:
-        print("Erro ao atualizar status no Supabase:", result.error)
+    try:
+        result.raise_for_status()
+    except Exception as e:
+        print("Erro ao atualizar status no Supabase:", e)
 
     return "", 200
 
