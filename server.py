@@ -173,17 +173,29 @@ def webhook_pix():
     if not data or "pix" not in data:
         return jsonify({"error": "JSON inválido"}), 400
 
-    pagamento = data["pix"][0]  # primeiro item da lista
+    pagamento = data["pix"][0]
 
     txid = pagamento.get("txid")
-    status = "CONCLUIDO"  # ou o que você quiser fixar
+    if not txid:
+        return jsonify({"error": "txid não informado"}), 400
+
+    status = "CONCLUIDO"
     valor = pagamento.get("valor")
 
     print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Valor: {valor}, Status: {status}")
 
     os.makedirs("status_pagamentos", exist_ok=True)
 
-    with open(f"status_pagamentos/{txid}.json", "w", encoding="utf-8") as f:
+    # Antes de salvar, verificar se status já está salvo para evitar sobrescrever desnecessariamente
+    status_file = f"status_pagamentos/{txid}.json"
+    if os.path.exists(status_file):
+        with open(status_file, "r", encoding="utf-8") as f:
+            status_data = json.load(f)
+        if status_data.get("status") == status:
+            # Já registrado, ignorar para evitar duplicação
+            return "", 204
+
+    with open(status_file, "w", encoding="utf-8") as f:
         json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
 
     return "", 204
