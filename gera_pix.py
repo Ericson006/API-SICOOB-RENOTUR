@@ -1,61 +1,43 @@
 import requests
-import uuid
-import json
-import qrcode
-from PIL import Image
-import os
 
-def gerar_pix(nome, valor):
-    txid = str(uuid.uuid4())[:32]
+#certificados armazenados no secret files do render
+CERT_FILE = "/etc/secrets/certificado.pem"
+KEY_FILE = "/etc/secrets/chave-privada-sem-senha.pem"
+CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
+TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
+COB_URL   = "https://api.sicoob.com.br/pix/api/v2/cob"
+
+def get_access_token():
     payload = {
-        "calendario": {"expiracao": 3600},
-        "devedor": {"nome": nome},
-        "valor": {"original": f"{valor:.2f}"},
-        "chave": "sua-chave-pix-aqui",
-        "solicitacaoPagador": "Pagamento via Pix",
-        "infoAdicionais": []
+        "grant_type":"client_credentials",
+        "client_id": CLIENT_ID,
+        "scope":     "cob.write cob.read pix.read webhook.read webhook.write"
     }
-
-    headers = {
-        "Authorization": "Bearer seu-token-aqui",
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(
-        "https://api.sicoob.com.br/pix/api/v2/cob",
-        json=payload,
-        headers=headers,
-        cert=("certificado.pem", "chave.key")  # cert e key
+    resp = requests.post(
+        TOKEN_URL, data=payload,
+        headers={"Content-Type":"application/x-www-form-urlencoded"},
+        cert=(CERT_FILE, KEY_FILE), timeout=15
     )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
-    if response.status_code != 201:
-        raise Exception(f"Erro ao gerar cobrança: {response.text}")
-
-    data = response.json()
-    txid = data["txid"]
-    pix_copia_cola = data["loc"]["id"]
-
-    # Gera QR Code
-    payload_qr = requests.get(
-        f"https://api.sicoob.com.br/pix/api/v2/loc/{pix_copia_cola}/qrcode",
-        headers=headers,
-        cert=("certificado.pem", "chave.key")
-    ).json()
-
-    codigo_qr = payload_qr["qrcode"]
-    imagem_qr = qrcode.make(codigo_qr)
-
-    os.makedirs("static/qrcodes", exist_ok=True)
-    caminho_imagem = f"static/qrcodes/{txid}.png"
-    imagem_qr.save(caminho_imagem)
-
-    # Salva cobrança
-    os.makedirs("cobrancas", exist_ok=True)
-    with open(f"cobrancas/{txid}.json", "w") as f:
-        json.dump({
-            "txid": txid,
-            "pix_copia_cola": codigo_qr,
-            "qrcode_img": "/" + caminho_imagem
-        }, f)
-
-    return txid, codigo_qr, caminho_imagem
+def gera_cobranca_pix():
+    token = get_access_token()
+    payload = {
+        "calendario": {"expiracao":3600},
+        "valor":      {"original":"140.00"},
+        "chave":      "04763318000185",
+        "solicitacaoPagador":"Pagamento referente a compra da passagem"
+    }
+    resp = requests.post(
+        COB_URL, json=payload,
+        headers={"Authorization":f"Bearer {token}", "Content-Type":"application/json"},
+        cert=(CERT_FILE, KEY_FILE), timeout=15
+    )
+    resp.raise_for_status()
+    d = resp.json()
+    loc = d.get("location"); br = d.get("brcode")
+    if not loc or not br:
+        raise RuntimeError("Resposta incompleta da API")
+    link = loc if loc.startswith("http") else "https://"+loc
+    return {"link_pix":link, "brcode":br}
