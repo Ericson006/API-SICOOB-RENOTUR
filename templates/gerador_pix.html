@@ -40,23 +40,23 @@
         try {
           data = await res.json();
         } catch {
-          throw new Error(`Resposta inválida do servidor (status ${res.status})`);
+          throw new Error(Resposta inválida do servidor (status ${res.status}));
         }
   
         // 3) se não OK, lança para catch
         if (!res.ok) {
           // se tiver detail, mostra httpMessage
-          const msg = data.detail?.httpMessage || data.error || `HTTP ${res.status}`;
+          const msg = data.detail?.httpMessage || data.error || HTTP ${res.status};
           throw new Error(msg);
         }
   
         // 4) sucesso: exibe o link
         st.textContent = '✅ Cobrança gerada!';
-        lk.innerHTML   = `
+        lk.innerHTML   = 
           <a href="${data.link_pix}" target="_blank">
             ${data.link_pix}
           </a>
-        `;
+        ;
       } catch (err) {
         st.textContent = '❌ ' + err.message;
         console.error(err);
