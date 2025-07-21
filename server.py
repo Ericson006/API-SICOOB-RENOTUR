@@ -16,6 +16,7 @@ CHAVE_PIX = "04763318000185"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+BASE_URL = os.getenv("BASE_URL", "https://api-sicoob-renotur.onrender.com")  # URL base da sua API
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -75,7 +76,9 @@ def api_gerar_cobranca():
             "valor": {"original": f"{valor:.2f}"},
             "chave": CHAVE_PIX,
             "solicitacaoPagador": solicitacao,
-            "txid": txid
+            "txid": txid,
+            # Adiciona webhookUrl explícito para evitar /pix/pix na URL do webhook
+            "webhookUrl": f"{BASE_URL}/webhook/pix"
         }
 
         # Criar cobrança na API Sicoob
@@ -182,50 +185,37 @@ def api_status(txid):
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json(silent=True)
-    print("📥 Webhook recebido (raw):", data)
+    print("Webhook recebido:", data)
 
     if not data:
-        print("⚠️ JSON inválido recebido no webhook")
+        print("JSON inválido recebido no webhook")
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
-    if isinstance(data.get("pix"), list) and data["pix"]:
+    if "pix" in data and isinstance(data["pix"], list) and len(data["pix"]) > 0:
         txid = data["pix"][0].get("txid")
-    elif data.get("txid"):
+    elif "txid" in data:
         txid = data.get("txid")
 
-    print(f"🔍 txid bruto extraído: {txid!r}")
-
     if not txid:
-        print("⚠️ txid ausente no webhook")
+        print("txid ausente no webhook")
         return jsonify({"error": "txid ausente"}), 400
 
-    txid = txid.strip().upper()
-    print(f"✅ txid normalizado: {txid!r}")
+    print(f"Recebido txid no webhook: {txid}")
 
     try:
-        res_check = supabase.table("cobrancas") \
-            .select("txid") \
-            .eq("txid", txid) \
-            .single() \
-            .execute()
-        print("🔎 Supabase check:", res_check.data)
-
+        res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
         if not res_check.data:
-            print("⚠️ txid não encontrado no banco:", txid)
+            print("txid não encontrado no banco:", txid)
             return jsonify({"error": "txid não encontrado"}), 404
 
-        res_update = supabase.table("cobrancas") \
-            .update({"status": "CONCLUIDO"}) \
-            .eq("txid", txid) \
-            .execute()
-        print("✏️ Supabase update:", res_update.data)
+        res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
+        print(f"Status atualizado para CONCLUIDO no txid {txid}")
 
     except Exception as e:
-        print("❌ Erro durante operação no Supabase:", e)
-        return jsonify({"error": "Erro interno ao atualizar status"}), 500
+        print("Erro ao atualizar status:", e)
+        return jsonify({"error": "Exceção ao atualizar status"}), 500
 
-    print(f"🎉 Status atualizado para CONCLUIDO no txid {txid}")
     return "", 200
 
 if __name__ == '__main__':
