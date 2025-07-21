@@ -71,7 +71,6 @@ def cria_cobranca_e_salva():
         "txid": txid,
         "brcode": brcode,
         "status": "PENDENTE",
-        "created_at": datetime.utcnow()
     }).execute()
 
     if result.error:
@@ -113,7 +112,6 @@ def api_gerar_cobranca():
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
-            "created_at": datetime.utcnow()
         }).execute()
 
         if result.error:
