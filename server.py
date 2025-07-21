@@ -193,7 +193,7 @@ def webhook_pix():
 
     # 🔍 LOG ADICIONAL PARA DEBUG
     import json
-    print("JSON formatado recebido:\n", json.dumps(data, indent=2, ensure_ascii=False)
+    print("JSON formatado recebido:\n", json.dumps(data, indent=2, ensure_ascii=False))
 
     if not data:
         print("JSON inválido recebido no webhook")
