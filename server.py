@@ -174,9 +174,24 @@ def webhook():
 
     print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Status: {status}")
 
-    # Aqui você pode atualizar o banco de dados ou sinalizar para o frontend de outra forma
+    # Garante que a pasta existe
+    os.makedirs("status_pagamento", exist_ok=True)
+
+    # Salva o status em JSON
+    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
+        json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
 
     return jsonify({"message": "Webhook recebido com sucesso"}), 200
+
+@app.route("/status_pagamento/<txid>")
+def status_pagamento(txid):
+    caminho = os.path.join("status_pagamento", f"{txid}.json")
+    if not os.path.exists(caminho):
+        return jsonify({"status": "nao_encontrado"}), 404
+
+    with open(caminho, "r", encoding="utf-8") as f:
+        dados = json.load(f)
+    return jsonify(dados)
 
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
