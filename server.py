@@ -173,21 +173,27 @@ def status_pagamento(txid):
     return jsonify(dados)
 
 @app.route("/webhook/pix", methods=["POST"])
-def webhook():
-    data = request.json
-    print("[DEBUG] Webhook recebido:", data)  # Adicione esta linha!
+def webhook_pix():
+    data = request.get_json()
+    print(f"[DEBUG] Webhook recebido: {data}")
 
-    txid = data.get("txid")
-    status = data.get("status")
+    if not data or "pix" not in data:
+        return jsonify({"error": "JSON inválido"}), 400
 
-    print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Status: {status}")
+    pagamento = data["pix"][0]  # primeiro item da lista
 
-    os.makedirs("status_pagamento", exist_ok=True)
-    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    txid = pagamento.get("txid")
+    status = "CONCLUIDO"  # ou o que você quiser fixar
+    valor = pagamento.get("valor")
+
+    print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Valor: {valor}, Status: {status}")
+
+    os.makedirs("status_pagamentos", exist_ok=True)
+
+    with open(f"status_pagamentos/{txid}.json", "w", encoding="utf-8") as f:
+        json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
 
     return "", 204
-
 
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
