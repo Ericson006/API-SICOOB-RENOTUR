@@ -164,7 +164,7 @@ def api_status(txid):
 
 @app.route("/status_pagamento/<txid>")
 def status_pagamento(txid):
-    caminho = os.path.join("status_pagamento", f"{txid}.json")
+    caminho = os.path.join("status_pagamentos", f"{txid}.json")
     if not os.path.exists(caminho):
         return jsonify({"status": "nao_encontrado"}), 404
 
