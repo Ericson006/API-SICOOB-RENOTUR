@@ -180,6 +180,9 @@ def webhook():
     # Salva o status em JSON
     with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
         json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
+    
+    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
+    json.dump({"status": status}, f)
 
     return jsonify({"message": "Webhook recebido com sucesso"}), 200
 
