@@ -57,7 +57,7 @@ def api_gerar_cobranca():
         txid = uuid.uuid4().hex.upper()[:32]
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": f"{float(valor):.2f}"}
+            "valor": {"original": f"{float(valor):.2f}"},
             "chave": "04763318000185",
             "solicitacaoPagador": solicitacao,
             "txid": txid
