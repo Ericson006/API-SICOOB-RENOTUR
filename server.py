@@ -151,22 +151,6 @@ def pix_page(txid):
         STATUS=status,
         TXID=txid  # <--- esta linha adicionada para frontend
     )
-    
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    print("🔔 Webhook recebido:", data)
-
-    txid = data.get("txid")
-    status = data.get("status")
-
-    if not txid:
-        return jsonify({"error": "txid missing"}), 400
-
-    with open(f"{STATUS_DIR}/{txid}.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-
-    return jsonify({"status": "ok"}), 200
 
 @app.route("/api/status/<txid>")
 def api_status(txid):
