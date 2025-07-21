@@ -1,0 +1,18 @@
+Copyright © 2025  
+Renotur Transporte Turístico LTDA.
+CNPJ: 04.763.318/0001-85 
+
+Este software foi desenvolvido exclusivamente para uso interno da empresa Renotur Transporte Turístico LTDA.  
+A lógica de automação, estrutura do código-fonte, organização funcional e interface do sistema são consideradas propriedade intelectual da titular, protegidas pela Lei de Direitos Autorais (Lei nº 9.610/98) e demais legislações aplicáveis.
+
+É vedada a reprodução, distribuição, comercialização ou adaptação parcial ou total deste software sem a autorização expressa e formal da empresa detentora dos direitos.
+
+O acesso ao código-fonte não implica em cessão de direitos, licença de uso externa, nem autorização para redistribuição.
+
+Todas as permissões de uso, caso existam, devem estar devidamente registradas em contrato específico, firmado entre as partes.
+
+Para informações adicionais, dúvidas ou solicitação de uso, entre em contato com o setor responsável dentro da organização.
+
+---
+
+Este documento é parte integrante da documentação do sistema "API-SICOOB-RENOTUR".
