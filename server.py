@@ -57,7 +57,7 @@ def api_gerar_cobranca():
         txid = uuid.uuid4().hex.upper()[:32]
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": str(valor)},
+            "valor": {"original": f"{float(valor):.2f}"}
             "chave": "04763318000185",
             "solicitacaoPagador": solicitacao,
             "txid": txid
@@ -101,6 +101,10 @@ def api_gerar_cobranca():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+    print("Payload:", json.dumps(payload, indent=2))
+    print("Resposta:", resp.status_code, resp.text)
+
 
 @app.route("/pix/<txid>")
 def pix_page(txid):
