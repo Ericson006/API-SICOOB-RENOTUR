@@ -191,15 +191,24 @@ def webhook_pix():
     data = request.get_json()
     print("Webhook recebido:", data)
 
+    # 🔍 LOG ADICIONAL PARA DEBUG
+    import json
+    print("JSON formatado recebido:\n", json.dumps(data, indent=2, ensure_ascii=False)
+
     if not data:
         print("JSON inválido recebido no webhook")
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
-    if "pix" in data and isinstance(data["pix"], list) and len(data["pix"]) > 0:
-        txid = data["pix"][0].get("txid")
-    elif "txid" in data:
-        txid = data.get("txid")
+    # 🔧 AJUSTE: verificar estrutura exata
+    try:
+        # Verifica se há uma chave "pix" e extrai txid
+        if isinstance(data, dict) and "pix" in data:
+            eventos = data["pix"]
+            if isinstance(eventos, list) and len(eventos) > 0:
+                txid = eventos[0].get("txid")
+    except Exception as e:
+        print("Erro ao extrair txid:", e)
 
     if not txid:
         print("txid ausente no webhook")
