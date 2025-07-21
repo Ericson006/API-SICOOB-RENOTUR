@@ -162,29 +162,6 @@ def api_status(txid):
     except FileNotFoundError:
         return jsonify({"status": "NAO_ENCONTRADO"}), 404
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"error": "Requisição sem JSON"}), 400
-
-    txid = data.get("txid")
-    status = data.get("status")
-
-    print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Status: {status}")
-
-    # Garante que a pasta existe
-    os.makedirs("status_pagamentos", exist_ok=True)
-
-    # Salva o status em JSON
-    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
-        json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
-
-    # Aqui você pode atualizar o banco de dados ou sinalizar para o frontend de outra forma
-
-    return jsonify({"message": "Webhook recebido com sucesso"}), 200
-
 @app.route("/status_pagamento/<txid>")
 def status_pagamento(txid):
     caminho = os.path.join("status_pagamento", f"{txid}.json")
@@ -195,9 +172,22 @@ def status_pagamento(txid):
         dados = json.load(f)
     return jsonify(dados)
 
-@app.route("/webhook/pix", methods=["POST"])
-def webhook_pix():
-    return webhook()  # chama a função já existente
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    print("[DEBUG] Webhook recebido:", data)  # Adicione esta linha!
+
+    txid = data.get("txid")
+    status = data.get("status")
+
+    print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Status: {status}")
+
+    os.makedirs("status_pagamento", exist_ok=True)
+    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+    return "", 204
+
 
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
