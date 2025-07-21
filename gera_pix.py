@@ -1,4 +1,5 @@
 import requests
+import datetime
 
 #certificados armazenados no secret files do render
 CERT_FILE = "/etc/secrets/certificado.pem"
@@ -24,14 +25,15 @@ def get_access_token():
 def gera_cobranca_pix():
     token = get_access_token()
     payload = {
-        "calendario": {"expiracao":3600},
-        "valor":      {"original":"140.00"},
-        "chave":      "04763318000185",
-        "solicitacaoPagador":"Pagamento referente a compra da passagem"
+        "calendario": {"expiracao": 3600},
+        "valor": {"original": "140.00"},
+        "chave": "04763318000185",
+        "txid": "renotur" + datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+        "solicitacaoPagador": "Pagamento referente a compra da passagem"
     }
     resp = requests.post(
         COB_URL, json=payload,
-        headers={"Authorization":f"Bearer {token}", "Content-Type":"application/json"},
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         cert=(CERT_FILE, KEY_FILE), timeout=15
     )
     resp.raise_for_status()
@@ -39,5 +41,5 @@ def gera_cobranca_pix():
     loc = d.get("location"); br = d.get("brcode")
     if not loc or not br:
         raise RuntimeError("Resposta incompleta da API")
-    link = loc if loc.startswith("http") else "https://"+loc
-    return {"link_pix":link, "brcode":br}
+    link = loc if loc.startswith("http") else "https://" + loc
+    return {"link_pix": link, "brcode": br}
