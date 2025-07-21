@@ -2,7 +2,6 @@ import os
 from flask import Flask, render_template, jsonify, request
 import requests
 import qrcode
-import json
 import uuid
 from supabase import create_client, Client
 from datetime import datetime
@@ -43,41 +42,6 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json()["access_token"]
 
-def cria_cobranca_e_salva():
-    token = get_access_token()
-    txid = uuid.uuid4().hex.upper()[:32]
-    payload = {
-        "calendario": {"expiracao": 3600},
-        "valor": {"original": "140.00"},
-        "chave": "04763318000185",
-        "solicitacaoPagador": "Pagamento referente a compra da passagem",
-        "txid": txid
-    }
-    resp = requests.post(
-        COB_URL,
-        json=payload,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        cert=(CERT_FILE, KEY_FILE)
-    )
-    resp.raise_for_status()
-    d = resp.json()
-
-    brcode = d["brcode"]
-    img = qrcode.make(brcode)
-    img_path = f"static/qrcodes/{txid}.png"
-    img.save(img_path)
-
-    result = supabase.table("cobrancas").insert({
-        "txid": txid,
-        "brcode": brcode,
-        "status": "PENDENTE",
-    }).execute()
-
-    if result.error:
-        print("Erro ao inserir cobrança:", result.error)
-
-    return txid, img_path, brcode
-
 @app.route("/")
 def index():
     return render_template("gerador_pix.html")
@@ -85,15 +49,29 @@ def index():
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
+        data = request.get_json()
+        if not data or "valor" not in data:
+            return jsonify({"error": "Campo 'valor' é obrigatório"}), 400
+
+        try:
+            valor_float = float(data["valor"])
+            if valor_float <= 0:
+                return jsonify({"error": "Valor deve ser maior que zero"}), 400
+        except ValueError:
+            return jsonify({"error": "Valor inválido"}), 400
+
         token = get_access_token()
         txid = uuid.uuid4().hex.upper()[:32]
+        valor_str = f"{valor_float:.2f}"
+
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": "140.00"},
+            "valor": {"original": valor_str},
             "chave": "04763318000185",
             "solicitacaoPagador": "Pagamento referente a compra da passagem",
             "txid": txid
         }
+
         resp = requests.post(
             COB_URL,
             json=payload,
@@ -112,6 +90,8 @@ def api_gerar_cobranca():
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
+            "valor": valor_float,  # <-- grava o valor no banco também
+            "created_at": datetime.utcnow()
         }).execute()
 
         if result.error:
