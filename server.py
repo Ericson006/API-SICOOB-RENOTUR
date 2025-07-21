@@ -78,7 +78,7 @@ def api_gerar_cobranca():
             "txid": txid
         }
 
-        # Criar cobrança
+        # Criar cobrança na API Sicoob
         resp = requests.post(
             COB_URL,
             json=payload,
@@ -94,18 +94,22 @@ def api_gerar_cobranca():
         img.save(img_path)
 
         # Salvar no Supabase
-        res = supabase.table("cobrancas").insert({
-            "txid": txid,
-            "brcode": brcode,
-            "status": "PENDENTE",
-            "valor": valor,
-            "chave_pix": CHAVE_PIX,
-            "descricao": solicitacao
-        }).execute()
-
-        if res.status_code != 201:
-            print("Erro ao salvar cobrança no Supabase:", res.data)
-            return jsonify({"error": "Erro ao salvar cobrança"}), 500
+        try:
+            res = supabase.table("cobrancas").insert({
+                "txid": txid,
+                "brcode": brcode,
+                "status": "PENDENTE",
+                "valor": valor,
+                "chave_pix": CHAVE_PIX,
+                "descricao": solicitacao
+            }).execute()
+            dados_res = res.data
+            if not dados_res:
+                print("Erro: resposta vazia ao inserir no Supabase")
+                return jsonify({"error": "Erro ao salvar cobrança no banco"}), 500
+        except Exception as e:
+            print("Erro ao salvar cobrança no Supabase:", e)
+            return jsonify({"error": "Erro ao salvar cobrança no banco"}), 500
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
@@ -122,6 +126,7 @@ def api_gerar_cobranca():
                 "detail": resp.text
             }), resp.status_code
     except Exception as e:
+        print("Erro na geração da cobrança:", e)
         return jsonify({"error": str(e)}), 500
 
 @app.route("/pix/<txid>")
@@ -133,18 +138,11 @@ def pix_page(txid):
 
     try:
         res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
-
-        if res.status_code != 200:
-            print("Erro ao buscar cobrança no Supabase:", res.data)
-            return "Erro ao buscar cobrança", 500
-
         dados = res.data
-
         if not dados:
             return "Cobrança não encontrada no banco", 404
-
     except Exception as e:
-        print("Exceção ao buscar cobrança no Supabase:", e)
+        print("Erro ao buscar cobrança no Supabase:", e)
         return "Erro ao buscar cobrança", 500
 
     # Buscar também na API do Sicoob para validar status
@@ -173,17 +171,12 @@ def pix_page(txid):
 def api_status(txid):
     try:
         res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
-
-        if res.status_code != 200:
-            print("Erro ao buscar status no Supabase:", res.data)
-            return jsonify({"status": "ERRO"}), 500
-
-        if not res.data:
+        dados = res.data
+        if not dados:
             return jsonify({"status": "NAO_ENCONTRADO"}), 404
-
-        return jsonify({"status": res.data["status"]})
+        return jsonify({"status": dados["status"]})
     except Exception as e:
-        print("Exceção ao buscar status:", e)
+        print("Erro ao buscar status no Supabase:", e)
         return jsonify({"status": "ERRO"}), 500
 
 @app.route("/webhook/pix", methods=["POST"])
@@ -209,19 +202,11 @@ def webhook_pix():
 
     try:
         res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
-        if res_check.status_code != 200:
-            print("Erro ao verificar cobrança no Supabase:", res_check.data)
-            return jsonify({"error": "Erro ao verificar cobrança"}), 500
-
         if not res_check.data:
             print("txid não encontrado no banco:", txid)
             return jsonify({"error": "txid não encontrado"}), 404
 
         res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        if res_update.status_code != 200:
-            print("Erro ao atualizar status no Supabase:", res_update.data)
-            return jsonify({"error": "Erro ao atualizar status"}), 500
-
         print(f"Status atualizado para CONCLUIDO no txid {txid}")
 
     except Exception as e:
