@@ -163,16 +163,6 @@ def api_status(txid):
     except FileNotFoundError:
         return jsonify({"status": "NAO_ENCONTRADO"}), 404
 
-@app.route("/status_pagamento/<txid>")
-def status_pagamento(txid):
-    caminho = os.path.join("status_pagamento", f"{txid}.json")
-    if not os.path.exists(caminho):
-        return jsonify({"status": "nao_encontrado"}), 404
-
-    with open(caminho, "r", encoding="utf-8") as f:
-        dados = json.load(f)
-    return jsonify(dados)
-
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json()
