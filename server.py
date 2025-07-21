@@ -103,7 +103,7 @@ def api_gerar_cobranca():
             "descricao": solicitacao
         }).execute()
 
-        if res.error:
+        if hasattr(res, "error") and res.error:
             print("Erro ao salvar cobrança no Supabase:", res.error)
             return jsonify({"error": "Erro ao salvar cobrança"}), 500
 
@@ -132,12 +132,11 @@ def pix_page(txid):
         return "TXID inválido", 400
 
     try:
-        # Busca no Supabase
         res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
 
-    if res.error:
-        print("Erro ao buscar cobrança no Supabase:", res.error)
-        return "Erro ao buscar cobrança", 500
+        if hasattr(res, "error") and res.error:
+            print("Erro ao buscar cobrança no Supabase:", res.error)
+            return "Erro ao buscar cobrança", 500
 
         dados = res.data
 
@@ -167,7 +166,7 @@ def pix_page(txid):
         STATUS=dados.get("status", "PENDENTE"),
         TXID=txid,
         VALOR=dados.get("valor", "0.00"),
-        COBRANCA_API=cobranca_api  # Se quiser usar no template
+        COBRANCA_API=cobranca_api
     )
 
 @app.route("/api/status/<txid>")
@@ -175,8 +174,8 @@ def api_status(txid):
     try:
         res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
 
-        if res.status_code != 200:
-            print("Erro ao buscar status no Supabase:", res.status_code, res.data)
+        if hasattr(res, "error") and res.error:
+            print("Erro ao buscar status no Supabase:", res.error)
             return jsonify({"status": "ERRO"}), 500
 
         if not res.data:
@@ -199,8 +198,8 @@ def webhook_pix():
 
     try:
         res = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        if res.status_code != 200:
-            print("Erro ao atualizar status no Supabase:", res.status_code, res.data)
+        if hasattr(res, "error") and res.error:
+            print("Erro ao atualizar status no Supabase:", res.error)
     except Exception as e:
         print("Erro ao atualizar status:", e)
 
