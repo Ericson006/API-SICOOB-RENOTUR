@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: api-pix-sicoob
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn server:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10
