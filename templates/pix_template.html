@@ -77,8 +77,8 @@
             isChecking = true;
 
             try {
-                const res = await fetch(/api/status/${txid});
-
+                const res = await fetch(`/api/status/${txid}`);
+                
                 if (!res.ok) {
                     // Se status 404, significa que o pagamento ainda não existe/foi iniciado
                     // Você pode optar por mostrar mensagem ou deixar silencioso
