@@ -172,7 +172,7 @@ def status_pagamento(txid):
         dados = json.load(f)
     return jsonify(dados)
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook/pix", methods=["POST"])
 def webhook():
     data = request.json
     print("[DEBUG] Webhook recebido:", data)  # Adicione esta linha!
