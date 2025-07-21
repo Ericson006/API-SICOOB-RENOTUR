@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify, request
 import requests, qrcode, os, json, uuid
+from supabase import create_client, Client
 
 # Certificados armazenados no secret files do render
 CERT_FILE = "/etc/secrets/certificado.pem"
