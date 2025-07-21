@@ -15,7 +15,7 @@ COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
 
 # Configurações Supabase (definidas nas variáveis de ambiente do Render ou local)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # <-- aqui
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # chave correta
 
 print("SUPABASE_URL:", SUPABASE_URL)
 print("SUPABASE_KEY:", (SUPABASE_KEY[:6] + "...") if SUPABASE_KEY else None)
@@ -49,29 +49,26 @@ def index():
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
-        data = request.get_json()
-        if not data or "valor" not in data:
-            return jsonify({"error": "Campo 'valor' é obrigatório"}), 400
+        data = request.get_json() or {}
 
+        # Pega valor enviado, padrão 140.00 se não enviado ou inválido
+        valor_str = str(data.get("valor", "140.00")).replace(",", ".").strip()
         try:
-            valor_float = float(data["valor"])
+            valor_float = float(valor_str)
             if valor_float <= 0:
-                return jsonify({"error": "Valor deve ser maior que zero"}), 400
+                raise ValueError()
         except ValueError:
-            return jsonify({"error": "Valor inválido"}), 400
+            return jsonify({"error": "Valor inválido. Deve ser número positivo."}), 400
 
         token = get_access_token()
         txid = uuid.uuid4().hex.upper()[:32]
-        valor_str = f"{valor_float:.2f}"
-
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": valor_str},
+            "valor": {"original": f"{valor_float:.2f}"},
             "chave": "04763318000185",
             "solicitacaoPagador": "Pagamento referente a compra da passagem",
             "txid": txid
         }
-
         resp = requests.post(
             COB_URL,
             json=payload,
@@ -86,12 +83,13 @@ def api_gerar_cobranca():
         img_path = f"static/qrcodes/{txid}.png"
         img.save(img_path)
 
+        # Insere no Supabase com created_at em ISO string
         result = supabase.table("cobrancas").insert({
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
-            "valor": valor_float,  # <-- grava o valor no banco também
-            "created_at": datetime.utcnow()
+            "valor": valor_float,
+            "created_at": datetime.utcnow().isoformat()
         }).execute()
 
         if result.error:
@@ -124,6 +122,7 @@ def pix_page(txid):
         QRCODE_IMG=qrcode_img,
         PIX_CODE=dados["brcode"],
         STATUS=dados.get("status", "PENDENTE"),
+        VALOR=dados.get("valor", 0.0),
         TXID=txid
     )
 
