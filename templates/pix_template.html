@@ -47,8 +47,9 @@
           <div id="checkmark" class="checkmark" style="display:none;">✔️</div>
         </div>
 
-        <p>Código PIX para copiar:</p>
+        <label for="pixCode">Código PIX para copiar:</label>
         <textarea readonly class="pix-code" id="pixCode">{{ PIX_CODE }}</textarea>
+
         <button onclick="copyPixCode()">Copiar Código</button>
 
         <div id="payment-status" class="message-confirmed" style="display:none;">
@@ -57,7 +58,6 @@
     </div>
 
     <script>
-        // Função para copiar o código PIX para a área de transferência
         function copyPixCode() {
             const pixCode = document.getElementById('pixCode');
             pixCode.select();
@@ -67,6 +67,7 @@
         }
 
         const txid = "{{ TXID }}";  // Variável injetada pelo backend
+        console.log("TXID:", txid);
 
         let polling;
         let isChecking = false;
