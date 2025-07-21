@@ -151,7 +151,7 @@ def webhook_pix():
     os.makedirs(STATUS_DIR, exist_ok=True)
     with open(f"{STATUS_DIR}/{txid}.json","w",encoding="utf-8") as f:
         json.dump({"txid": txid, "status": status}, f, indent=2, ensure_ascii=False)
-    return "",204
+    return "", 200
 
 if __name__ == '__main__':
     import os
