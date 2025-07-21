@@ -181,38 +181,51 @@ def api_status(txid):
 
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
-    data = request.get_json()
-    print("Webhook recebido:", data)
+    data = request.get_json(silent=True)
+    print("📥 Webhook recebido (raw):", data)
 
     if not data:
-        print("JSON inválido recebido no webhook")
+        print("⚠️ JSON inválido recebido no webhook")
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
-    if "pix" in data and isinstance(data["pix"], list) and len(data["pix"]) > 0:
+    if isinstance(data.get("pix"), list) and data["pix"]:
         txid = data["pix"][0].get("txid")
-    elif "txid" in data:
+    elif data.get("txid"):
         txid = data.get("txid")
 
+    print(f"🔍 txid bruto extraído: {txid!r}")
+
     if not txid:
-        print("txid ausente no webhook")
+        print("⚠️ txid ausente no webhook")
         return jsonify({"error": "txid ausente"}), 400
 
-    print(f"Recebido txid no webhook: {txid}")
+    txid = txid.strip().upper()
+    print(f"✅ txid normalizado: {txid!r}")
 
     try:
-        res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
+        res_check = supabase.table("cobrancas") \
+            .select("txid") \
+            .eq("txid", txid) \
+            .single() \
+            .execute()
+        print("🔎 Supabase check:", res_check.data)
+
         if not res_check.data:
-            print("txid não encontrado no banco:", txid)
+            print("⚠️ txid não encontrado no banco:", txid)
             return jsonify({"error": "txid não encontrado"}), 404
 
-        res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        print(f"Status atualizado para CONCLUIDO no txid {txid}")
+        res_update = supabase.table("cobrancas") \
+            .update({"status": "CONCLUIDO"}) \
+            .eq("txid", txid) \
+            .execute()
+        print("✏️ Supabase update:", res_update.data)
 
     except Exception as e:
-        print("Erro ao atualizar status:", e)
-        return jsonify({"error": "Exceção ao atualizar status"}), 500
+        print("❌ Erro durante operação no Supabase:", e)
+        return jsonify({"error": "Erro interno ao atualizar status"}), 500
 
+    print(f"🎉 Status atualizado para CONCLUIDO no txid {txid}")
     return "", 200
 
 if __name__ == '__main__':
