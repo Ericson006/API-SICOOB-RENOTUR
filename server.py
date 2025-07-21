@@ -189,19 +189,39 @@ def api_status(txid):
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json()
-    if not data or "pix" not in data:
+    print("Webhook recebido:", data)
+
+    if not data:
         return jsonify({"error": "JSON inválido"}), 400
 
-    txid = data["pix"][0].get("txid")
+    txid = None
+    if "pix" in data and isinstance(data["pix"], list) and len(data["pix"]) > 0:
+        txid = data["pix"][0].get("txid")
+    elif "txid" in data:
+        txid = data.get("txid")
+
     if not txid:
         return jsonify({"error": "txid ausente"}), 400
 
+    print(f"Recebido txid no webhook: {txid}")
+
     try:
+        res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
+        if not res_check.data:
+            print("txid não encontrado no banco:", txid)
+            return jsonify({"error": "txid não encontrado"}), 404
+
         res = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
+        print("Resposta Supabase:", res.status_code, res.data)
+
         if hasattr(res, "error") and res.error:
             print("Erro ao atualizar status no Supabase:", res.error)
+            return jsonify({"error": "Erro ao atualizar status"}), 500
+
+        print(f"Status atualizado para CONCLUIDO no txid {txid}")
     except Exception as e:
         print("Erro ao atualizar status:", e)
+        return jsonify({"error": "Exceção ao atualizar status"}), 500
 
     return "", 200
 
