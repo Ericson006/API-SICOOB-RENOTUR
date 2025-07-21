@@ -195,6 +195,10 @@ def status_pagamento(txid):
         dados = json.load(f)
     return jsonify(dados)
 
+@app.route("/webhook/pix", methods=["POST"])
+def webhook_pix():
+    return webhook()  # chama a função já existente
+
 # Necessário para deploy no Render: usar host 0.0.0.0 e porta da variável de ambiente
 if __name__ == '__main__':
     import os
