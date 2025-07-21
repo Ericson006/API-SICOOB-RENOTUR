@@ -9,13 +9,15 @@ CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL   = "https://api.sicoob.com.br/pix/api/v2/cob"
 
+# Inicializa supabase com as variáveis de ambiente
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# Garante pastas
-os.makedirs("cobrancas", exist_ok=True)
+# Garante pastas para QR codes
 os.makedirs("static/qrcodes", exist_ok=True)
-STATUS_DIR = "status_pagamentos"
-os.makedirs(STATUS_DIR, exist_ok=True)
 
 def get_access_token():
     resp = requests.post(
@@ -30,6 +32,18 @@ def get_access_token():
     )
     resp.raise_for_status()
     return resp.json()["access_token"]
+
+def salvar_cobranca_supabase(txid, brcode, status="PENDENTE"):
+    data = {
+        "txid": txid,
+        "brcode": brcode,
+        "status": status
+    }
+    response = supabase.table("cobrancas").insert(data).execute()
+    if response.error:
+        print("Erro ao salvar cobrança no Supabase:", response.error)
+        return False
+    return True
 
 def cria_cobranca_e_salva():
     token = get_access_token()
@@ -58,12 +72,9 @@ def cria_cobranca_e_salva():
     img_path = f"static/qrcodes/{txid}.png"
     img.save(img_path)
 
-    dados = {
-        "qrcode_img": f"/static/qrcodes/{txid}.png",
-        "pix_copia_cola": brcode
-    }
-    with open(f"cobrancas/{txid}.json","w",encoding="utf-8") as f:
-        json.dump(dados,f,ensure_ascii=False)
+    sucesso = salvar_cobranca_supabase(txid, brcode)
+    if not sucesso:
+        raise Exception("Falha ao salvar cobrança no banco")
 
     return txid
 
@@ -96,11 +107,10 @@ def api_gerar_cobranca():
         img = qrcode.make(brcode)
         img_path = f"static/qrcodes/{txid}.png"
         img.save(img_path)
-        with open(f"cobrancas/{txid}.json", "w", encoding="utf-8") as f:
-            json.dump({
-                "qrcode_img": f"/static/qrcodes/{txid}.png",
-                "pix_copia_cola": brcode
-            }, f, ensure_ascii=False)
+
+        sucesso = salvar_cobranca_supabase(txid, brcode)
+        if not sucesso:
+            return jsonify({"error": "Falha ao salvar cobrança no banco"}), 500
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
@@ -114,44 +124,50 @@ def api_gerar_cobranca():
 
 @app.route("/pix/<txid>")
 def pix_page(txid):
-    try:
-        with open(f"cobrancas/{txid}.json","r",encoding="utf-8") as f:
-            dados = json.load(f)
-    except FileNotFoundError:
-        return "Cobrança não encontrada",404
+    # Busca cobrança no supabase
+    response = supabase.table("cobrancas").select("*").eq("txid", txid).execute()
+    if response.error:
+        return f"Erro ao buscar cobrança: {response.error}", 500
+    dados_list = response.data
+    if not dados_list:
+        return "Cobrança não encontrada", 404
+    dados = dados_list[0]
 
-    status = "PENDENTE"
-    try:
-        status = json.load(open(f"{STATUS_DIR}/{txid}.json","r",encoding="utf-8")).get("status","PENDENTE")
-    except:
-        pass
+    status = dados.get("status", "PENDENTE")
+
+    dados_template = {
+        "qrcode_img": f"/static/qrcodes/{txid}.png",
+        "pix_copia_cola": dados["brcode"]
+    }
 
     return render_template("pix_template.html",
-        QRCODE_IMG=dados["qrcode_img"],
-        PIX_CODE=dados["pix_copia_cola"],
+        QRCODE_IMG=dados_template["qrcode_img"],
+        PIX_CODE=dados_template["pix_copia_cola"],
         STATUS=status,
         TXID=txid
     )
 
 @app.route("/api/status/<txid>")
 def api_status(txid):
-    try:
-        status = json.load(open(f"{STATUS_DIR}/{txid}.json","r",encoding="utf-8")).get("status","PENDENTE")
-        return jsonify({"status": status})
-    except:
-        return jsonify({"status": "NAO_ENCONTRADO"}),404
+    response = supabase.table("cobrancas").select("status").eq("txid", txid).execute()
+    if response.error:
+        return jsonify({"error": str(response.error)}), 500
+    data = response.data
+    if not data:
+        return jsonify({"status": "NAO_ENCONTRADO"}), 404
+    return jsonify({"status": data[0]["status"]})
 
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json()
     if not data or "pix" not in data:
-        return jsonify({"error": "JSON inválido"}),400
+        return jsonify({"error": "JSON inválido"}), 400
     pagamento = data["pix"][0]
     txid = pagamento.get("txid")
     status = "CONCLUIDO"
-    os.makedirs(STATUS_DIR, exist_ok=True)
-    with open(f"{STATUS_DIR}/{txid}.json","w",encoding="utf-8") as f:
-        json.dump({"txid": txid, "status": status}, f, indent=2, ensure_ascii=False)
+    response = supabase.table("cobrancas").update({"status": status}).eq("txid", txid).execute()
+    if response.error:
+        return jsonify({"error": f"Falha ao atualizar status: {response.error}"}), 500
     return "", 200
 
 if __name__ == '__main__':
