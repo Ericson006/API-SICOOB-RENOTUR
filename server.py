@@ -180,9 +180,8 @@ def webhook():
     # Salva o status em JSON
     with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
         json.dump({"txid": txid, "status": status}, f, ensure_ascii=False, indent=2)
-    
-    with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
-    json.dump({"status": status}, f)
+
+    # Aqui você pode atualizar o banco de dados ou sinalizar para o frontend de outra forma
 
     return jsonify({"message": "Webhook recebido com sucesso"}), 200
 
