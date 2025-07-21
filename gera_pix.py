@@ -1,9 +1,7 @@
-import requests
-import datetime
+import requests, uuid
 
-#certificados armazenados no secret files do render
 CERT_FILE = "/etc/secrets/certificado.pem"
-KEY_FILE = "/etc/secrets/chave-privada-sem-senha.pem"
+KEY_FILE  = "/etc/secrets/chave-privada-sem-senha.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL   = "https://api.sicoob.com.br/pix/api/v2/cob"
@@ -24,22 +22,23 @@ def get_access_token():
 
 def gera_cobranca_pix():
     token = get_access_token()
+    txid = uuid.uuid4().hex.upper()[:32]
     payload = {
-        "calendario": {"expiracao": 3600},
-        "valor": {"original": "140.00"},
-        "chave": "04763318000185",
-        "txid": "renotur" + datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
-        "solicitacaoPagador": "Pagamento referente a compra da passagem"
+        "calendario": {"expiracao":3600},
+        "valor":      {"original":"140.00"},
+        "chave":      "04763318000185",
+        "solicitacaoPagador":"Pagamento referente a compra da passagem",
+        "txid":       txid
     }
     resp = requests.post(
         COB_URL, json=payload,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={"Authorization":f"Bearer {token}", "Content-Type":"application/json"},
         cert=(CERT_FILE, KEY_FILE), timeout=15
     )
     resp.raise_for_status()
     d = resp.json()
-    loc = d.get("location"); br = d.get("brcode")
-    if not loc or not br:
+    link  = d.get("location")
+    brcode= d.get("brcode")
+    if not link or not brcode:
         raise RuntimeError("Resposta incompleta da API")
-    link = loc if loc.startswith("http") else "https://" + loc
-    return {"link_pix": link, "brcode": br}
+    return {"link_pix": (link if link.startswith("http") else f"https://{link}"), "brcode": brcode}
