@@ -103,8 +103,8 @@ def api_gerar_cobranca():
             "descricao": solicitacao
         }).execute()
 
-        if res.status_code >= 400 or not res.data:
-            print("Erro ao salvar cobrança no Supabase:", res)
+        if res.error:
+            print("Erro ao salvar cobrança no Supabase:", res.error)
             return jsonify({"error": "Erro ao salvar cobrança"}), 500
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
@@ -134,8 +134,8 @@ def pix_page(txid):
     try:
         res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
 
-        if res.status_code >= 400:
-            print("Erro ao buscar cobrança no Supabase:", res)
+        if res.error:
+            print("Erro ao buscar cobrança no Supabase:", res.error)
             return "Erro ao buscar cobrança", 500
 
         dados = res.data
@@ -174,8 +174,8 @@ def api_status(txid):
     try:
         res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
 
-        if res.status_code >= 400:
-            print("Erro ao buscar status no Supabase:", res)
+        if res.error:
+            print("Erro ao buscar status no Supabase:", res.error)
             return jsonify({"status": "ERRO"}), 500
 
         if not res.data:
@@ -209,8 +209,8 @@ def webhook_pix():
 
     try:
         res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
-        if res_check.status_code >= 400:
-            print("Erro ao verificar cobrança no Supabase:", res_check)
+        if res_check.error:
+            print("Erro ao verificar cobrança no Supabase:", res_check.error)
             return jsonify({"error": "Erro ao verificar cobrança"}), 500
 
         if not res_check.data:
@@ -218,8 +218,8 @@ def webhook_pix():
             return jsonify({"error": "txid não encontrado"}), 404
 
         res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        if res_update.status_code >= 400:
-            print("Erro ao atualizar status no Supabase:", res_update)
+        if res_update.error:
+            print("Erro ao atualizar status no Supabase:", res_update.error)
             return jsonify({"error": "Erro ao atualizar status"}), 500
 
         print(f"Status atualizado para CONCLUIDO no txid {txid}")
