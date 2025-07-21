@@ -1,14 +1,111 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>Pagamento Pix</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8" />
+    <title>Pagamento PIX</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <style>
+      /* Efeito blur no QR code após pagamento concluído */
+      .blurred {
+        filter: blur(5px);
+        pointer-events: none;
+      }
+
+      /* Checkmark verde centralizado */
+      .checkmark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 4rem;
+        color: green;
+        pointer-events: none;
+      }
+
+      /* Container para posicionar checkmark sobre o QR code */
+      .qr-container {
+        position: relative;
+        display: inline-block;
+      }
+
+      /* Mensagem verde confirmando pagamento */
+      .message-confirmed {
+        margin-top: 1rem;
+        color: green;
+        font-weight: bold;
+        font-size: 1.2rem;
+      }
+    </style>
 </head>
 <body>
-    <h1>Escaneie o QR Code</h1>
-    <img src="{{ dados.qrcode_img }}" alt="QR Code">
-    <p><strong>Copia e Cola:</strong></p>
-    <code>{{ dados.pix_copia_cola }}</code>
+    <div class="container">
+        <h1>Pagamento PIX</h1>
+        <p>Escaneie o QR Code abaixo para pagar:</p>
+
+        <div class="qr-container">
+          <img src="{{ QRCODE_IMG }}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
+          <div id="checkmark" class="checkmark" style="display:none;">✔️</div>
+        </div>
+
+        <p>Código PIX para copiar:</p>
+        <textarea readonly class="pix-code" id="pixCode">{{ PIX_CODE }}</textarea>
+        <button onclick="copyPixCode()">Copiar Código</button>
+
+        <div id="payment-status" class="message-confirmed" style="display:none;">
+          Pagamento confirmado! Obrigado.
+        </div>
+    </div>
+
+    <script>
+        // Função para copiar o código PIX para a área de transferência
+        function copyPixCode() {
+            const pixCode = document.getElementById('pixCode');
+            pixCode.select();
+            pixCode.setSelectionRange(0, 99999); // Para dispositivos móveis
+            document.execCommand('copy');
+            alert('Código PIX copiado!');
+        }
+
+        const txid = "{{ TXID }}";  // Variável injetada pelo backend
+
+        let polling;
+        let isChecking = false;
+
+        // Função que consulta o status do pagamento via API e atualiza UI
+        async function checkStatus() {
+            if (isChecking) return; // evita chamadas simultâneas
+            isChecking = true;
+
+            try {
+                const res = await fetch(/api/status/${txid});
+
+                if (!res.ok) {
+                    // Se status 404, significa que o pagamento ainda não existe/foi iniciado
+                    // Você pode optar por mostrar mensagem ou deixar silencioso
+                    isChecking = false;
+                    return;
+                }
+
+                const data = await res.json();
+
+                // Confere se o status indica pagamento concluído
+                if (data.status && data.status.toUpperCase().startsWith("CONCL")) {
+                    document.getElementById('qrcode-img').classList.add('blurred');
+                    document.getElementById('checkmark').style.display = 'block';
+                    document.getElementById('payment-status').style.display = 'block';
+
+                    clearInterval(polling); // para o polling para economizar recursos
+                }
+            } catch (e) {
+                console.error("Erro ao consultar status:", e);
+            } finally {
+                isChecking = false;
+            }
+        }
+
+        // Inicia o polling para checar status a cada 1 segundo
+        polling = setInterval(checkStatus, 1000);
+        checkStatus();  // checa imediatamente ao carregar a página
+    </script>
 </body>
 </html>
