@@ -77,13 +77,15 @@ def index():
 def api_gerar_cobranca():
     try:
         token = get_access_token()
-        txid  = str(uuid.uuid4())[:32]
+        txid  = str(uuid.uuid4())[:32]  # cria um txid único
         payload = {
             "calendario": {"expiracao":3600},
             "valor": {"original":"140.00"},
             "chave": "04763318000185",
+            "txid": txid,  # <<< ADICIONE ESTA LINHA
             "solicitacaoPagador": "Pagamento referente a compra da passagem",
         }
+        # resto do código permanece igual
         resp = requests.post(
             COB_URL,
             json=payload,
