@@ -3,3 +3,5 @@ requests
 qrcode
 Pillow
 gunicorn
+psycopg[binary]
+supabase
