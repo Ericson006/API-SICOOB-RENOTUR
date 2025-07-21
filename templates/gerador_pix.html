@@ -20,50 +20,44 @@
   </div>
 
   <script>
-    const btn = document.getElementById('btnGerar'),
-          st  = document.getElementById('status'),
-          lk  = document.getElementById('linkPIX');
-  
-    btn.addEventListener('click', async () => {
-      st.textContent = 'Gerando…';
-      lk.innerHTML   = '';
-  
+  const btn = document.getElementById('btnGerar'),
+        st  = document.getElementById('status'),
+        lk  = document.getElementById('linkPIX');
+
+  btn.addEventListener('click', async () => {
+    st.textContent = 'Gerando…';
+    lk.innerHTML   = '';
+
+    try {
+      const res = await fetch('/api/gerar_cobranca', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      let data;
       try {
-        // 1) faz a chamada
-        const res = await fetch('/api/gerar_cobranca', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json' }
-        });
-  
-        // 2) tenta ler o JSON (mesmo em erro ele pode vir)
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(Resposta inválida do servidor (status ${res.status}));
-        }
-  
-        // 3) se não OK, lança para catch
-        if (!res.ok) {
-          // se tiver detail, mostra httpMessage
-          const msg = data.detail?.httpMessage || data.error || HTTP ${res.status};
-          throw new Error(msg);
-        }
-  
-        // 4) sucesso: exibe o link
-        st.textContent = '✅ Cobrança gerada!';
-        lk.innerHTML   = 
-          <a href="${data.link_pix}" target="_blank">
-            ${data.link_pix}
-          </a>
-        ;
-      } catch (err) {
-        st.textContent = '❌ ' + err.message;
-        console.error(err);
+        data = await res.json();
+      } catch {
+        throw new Error(`Resposta inválida do servidor (status ${res.status})`);
       }
-    });
-  </script>
-  
+
+      if (!res.ok) {
+        const msg = data.detail?.httpMessage || data.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      st.textContent = '✅ Cobrança gerada!';
+      lk.innerHTML = `
+        <a href="${data.link_pix}" target="_blank">
+          ${data.link_pix}
+        </a>
+      `;
+    } catch (err) {
+      st.textContent = '❌ ' + err.message;
+      console.error(err);
+    }
+  });
+</script>
   
 </body>
 </html>
