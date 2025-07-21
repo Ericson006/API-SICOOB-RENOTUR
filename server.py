@@ -1,32 +1,27 @@
 import os
-from flask import Flask, render_template, jsonify, request
 import requests
-import qrcode
 import uuid
+import qrcode
+from flask import Flask, render_template, jsonify, request
 from supabase import create_client, Client
 
-# Certificados armazenados no secret files do render
+# === CONFIGURAÇÕES ===
 CERT_FILE = "/etc/secrets/certificado.pem"
 KEY_FILE = "/etc/secrets/chave-privada-sem-senha.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
+CHAVE_PIX = "04763318000185"
 
-# Configurações Supabase (variáveis de ambiente)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-print("SUPABASE_URL:", SUPABASE_URL)
-print("SUPABASE_KEY:", (SUPABASE_KEY[:6] + "...") if SUPABASE_KEY else None)
-
-# Cria cliente Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-
-# Garante pasta para armazenar QR Codes localmente
 os.makedirs("static/qrcodes", exist_ok=True)
 
+# === TOKEN SICOOB ===
 def get_access_token():
     resp = requests.post(
         TOKEN_URL,
@@ -45,23 +40,26 @@ def get_access_token():
 def index():
     return render_template("gerador_pix.html")
 
+# === GERAR COBRANÇA ===
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
-        # Recebe JSON com valor, se enviado; senão usa padrão
         dados = request.get_json(silent=True) or {}
         valor = dados.get("valor", "140.00")
-        solicitacao = dados.get("solicitacao", "Pagamento referente a compra da passagem")
+        solicitacao = dados.get("solicitacao", "Pagamento referente à compra da passagem")
 
         token = get_access_token()
         txid = uuid.uuid4().hex.upper()[:32]
+
         payload = {
             "calendario": {"expiracao": 3600},
             "valor": {"original": f"{float(valor):.2f}"},
-            "chave": "04763318000185",
+            "chave": CHAVE_PIX,
             "solicitacaoPagador": solicitacao,
             "txid": txid
         }
+
+        # Criar cobrança
         resp = requests.post(
             COB_URL,
             json=payload,
@@ -71,97 +69,93 @@ def api_gerar_cobranca():
         resp.raise_for_status()
         d = resp.json()
 
+        # Criar QR Code
         brcode = d["brcode"]
         img = qrcode.make(brcode)
         img_path = f"static/qrcodes/{txid}.png"
         img.save(img_path)
 
-        # Inserir no Supabase, tratando erros com raise_for_status()
-        result = supabase.table("cobrancas").insert({
+        # Salvar no Supabase
+        supabase.table("cobrancas").insert({
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
             "valor": valor,
-            "chave_pix": "04763318000185",
+            "chave_pix": CHAVE_PIX,
         }).execute()
-        try:
-            result.raise_for_status()
-        except Exception as e:
-            print("Erro ao inserir cobrança:", e)
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
     except requests.exceptions.HTTPError as http_err:
         resp = http_err.response
         try:
-            detail = resp.json()
+            return jsonify({
+                "error": f"HTTP {resp.status_code}",
+                "detail": resp.json()
+            }), resp.status_code
         except Exception:
-            detail = resp.text
-        return jsonify({"error": f"HTTP {resp.status_code}", "detail": detail}), resp.status_code
-
+            return jsonify({
+                "error": f"HTTP {resp.status_code}",
+                "detail": resp.text
+            }), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    print("Payload:", json.dumps(payload, indent=2))
-    print("Resposta:", resp.status_code, resp.text)
-
-
+# === EXIBE PÁGINA DE PAGAMENTO PIX ===
 @app.route("/pix/<txid>")
 def pix_page(txid):
-    res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
     try:
+        res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
         res.raise_for_status()
+        dados = res.data
     except Exception as e:
         print("Erro ao buscar cobrança:", e)
         return "Erro ao buscar cobrança", 500
 
-    if not res.data:
+    if not dados:
         return "Cobrança não encontrada", 404
-
-    dados = res.data
-    qrcode_img = f"/static/qrcodes/{txid}.png"
 
     return render_template(
         "pix_template.html",
-        QRCODE_IMG=qrcode_img,
+        QRCODE_IMG=f"/static/qrcodes/{txid}.png",
         PIX_CODE=dados["brcode"],
         STATUS=dados.get("status", "PENDENTE"),
         TXID=txid,
         VALOR=dados.get("valor", "0.00")
     )
 
+# === VERIFICAR STATUS ===
 @app.route("/api/status/<txid>")
 def api_status(txid):
-    res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
     try:
+        res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
         res.raise_for_status()
+        if not res.data:
+            return jsonify({"status": "NAO_ENCONTRADO"}), 404
+        return jsonify({"status": res.data["status"]})
     except Exception as e:
         print("Erro ao buscar status:", e)
         return jsonify({"status": "ERRO"}), 500
 
-    if not res.data:
-        return jsonify({"status": "NAO_ENCONTRADO"}), 404
-    return jsonify({"status": res.data["status"]})
-
+# === WEBHOOK PIX ===
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json()
     if not data or "pix" not in data:
         return jsonify({"error": "JSON inválido"}), 400
 
-    pagamento = data["pix"][0]
-    txid = pagamento.get("txid")
+    txid = data["pix"][0].get("txid")
     if not txid:
         return jsonify({"error": "txid ausente"}), 400
 
-    result = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
     try:
-        result.raise_for_status()
+        supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
     except Exception as e:
-        print("Erro ao atualizar status no Supabase:", e)
+        print("Erro ao atualizar status:", e)
 
     return "", 200
 
+# === EXECUTAR SERVIDOR ===
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
