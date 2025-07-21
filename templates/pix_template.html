@@ -142,11 +142,7 @@
             pixCode.setSelectionRange(0, 99999); // Para dispositivos móveis
             try {
                 const successful = document.execCommand('copy');
-                if (successful) {
-                    alert('Código PIX copiado!');
-                } else {
-                    alert('Não foi possível copiar automaticamente. Copie manualmente.');
-                }
+                alert(successful ? 'Código PIX copiado!' : 'Não foi possível copiar automaticamente. Copie manualmente.');
             } catch (err) {
                 alert('Erro ao copiar: ' + err);
             }
@@ -173,13 +169,19 @@
                 }
 
                 const data = await res.json();
+                console.log("Status recebido:", data.status);
 
-                if (data.status && data.status.toUpperCase().startsWith("CONCL")) {
-                    document.getElementById('qrcode-img').classList.add('blurred');
-                    document.getElementById('checkmark').style.display = 'block';
-                    document.getElementById('payment-status').style.display = 'block';
+                if (data.status) {
+                    // Normaliza o status para facilitar checagem
+                    const statusNormalized = data.status.trim().toUpperCase();
 
-                    clearInterval(polling); // para polling
+                    if (statusNormalized.startsWith("CONCL")) {
+                        document.getElementById('qrcode-img').classList.add('blurred');
+                        document.getElementById('checkmark').style.display = 'block';
+                        document.getElementById('payment-status').style.display = 'block';
+
+                        clearInterval(polling); // para polling
+                    }
                 }
             } catch (e) {
                 console.error("Erro ao consultar status:", e);
