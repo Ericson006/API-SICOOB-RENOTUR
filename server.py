@@ -103,8 +103,8 @@ def api_gerar_cobranca():
             "descricao": solicitacao
         }).execute()
 
-        if res.status_code != 201:
-            print("Erro ao salvar cobrança no Supabase:", res.status_code, res.data)
+        if res.error:
+            print("Erro ao salvar cobrança no Supabase:", res.error)
             return jsonify({"error": "Erro ao salvar cobrança"}), 500
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
@@ -135,9 +135,9 @@ def pix_page(txid):
         # Busca no Supabase
         res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
 
-        if res.status_code != 200:
-            print("Erro ao buscar cobrança no Supabase:", res.status_code, res.data)
-            return "Erro ao buscar cobrança", 500
+    if res.error:
+        print("Erro ao buscar cobrança no Supabase:", res.error)
+        return "Erro ao buscar cobrança", 500
 
         dados = res.data
 
