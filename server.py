@@ -175,7 +175,7 @@ def webhook():
     print(f"[WEBHOOK] Pagamento recebido. TXID: {txid}, Status: {status}")
 
     # Garante que a pasta existe
-    os.makedirs("status_pagamento", exist_ok=True)
+    os.makedirs("status_pagamentos", exist_ok=True)
 
     # Salva o status em JSON
     with open(f"status_pagamento/{txid}.json", "w", encoding="utf-8") as f:
