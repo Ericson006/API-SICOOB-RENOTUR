@@ -49,7 +49,6 @@ def index():
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
-        # lê JSON { valor, solicitacao }
         dados = request.get_json(silent=True) or {}
         valor = float(dados.get("valor", "140.00"))
         solicitacao = dados.get("solicitacao", "Pagamento referente à compra da passagem")
@@ -66,7 +65,6 @@ def api_gerar_cobranca():
             "txid": txid
         }
 
-        # cria cobrança no Sicoob
         resp = requests.post(
             COB_URL,
             json=payload,
@@ -76,23 +74,20 @@ def api_gerar_cobranca():
         resp.raise_for_status()
         d = resp.json()
 
-        # gera QR
         brcode = d["brcode"]
         img = qrcode.make(brcode)
         img_path = f"static/qrcodes/{txid}.png"
         img.save(img_path)
 
-        # salva no Supabase
-        insert = supabase.table("cobrancas").insert({
+        result = supabase.table("cobrancas").insert({
             "txid": txid,
             "brcode": brcode,
             "status": "PENDENTE",
             "valor": valor,
             "chave_pix": CHAVE_PIX
         }).execute()
-
-        if insert.status_code != 201:
-            app.logger.error("Erro ao inserir no Supabase: %s", insert)
+        if result.error:
+            app.logger.error("Erro ao inserir no Supabase: %s", result.error)
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
@@ -116,10 +111,9 @@ def pix_page(txid):
     if not validar_txid(txid):
         return "TXID inválido", 400
 
-    # busca no Supabase
     res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
-    if res.status_code != 200 or not res.data:
-        app.logger.error("Cobrança não encontrada no Supabase: %s", res)
+    if res.error or not res.data:
+        app.logger.error("Cobrança não encontrada no Supabase: %s", res.error)
         return "Cobrança não encontrada", 404
 
     dados = res.data
@@ -136,7 +130,7 @@ def pix_page(txid):
 @app.route("/api/status/<txid>")
 def api_status(txid):
     res = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute()
-    if res.status_code != 200 or not res.data:
+    if res.error or not res.data:
         return jsonify({"status": "NAO_ENCONTRADO"}), 404
     return jsonify({"status": res.data["status"]})
 
@@ -152,11 +146,12 @@ def webhook_pix():
         return jsonify({"error": "txid ausente"}), 400
 
     upd = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-    if upd.status_code != 200:
-        app.logger.error("Erro ao atualizar status no Supabase: %s", upd)
+    if upd.error:
+        app.logger.error("Erro ao atualizar status no Supabase: %s", upd.error)
 
     return "", 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
