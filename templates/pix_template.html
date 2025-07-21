@@ -5,32 +5,110 @@
     <title>Pagamento PIX</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <style>
-      /* Efeito blur no QR code após pagamento concluído */
+      body {
+        font-family: Arial, sans-serif;
+        background: #f9f9f9;
+        margin: 0;
+        padding: 2rem;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 100vh;
+      }
+
+      .container {
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+      }
+
+      h1 {
+        margin-bottom: 0.5rem;
+        color: #333;
+      }
+
+      p {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        color: #555;
+      }
+
+      .qr-container {
+        position: relative;
+        display: inline-block;
+        margin-bottom: 1rem;
+      }
+
+      /* QR Code */
+      .qrcode {
+        width: 250px;
+        height: 250px;
+        border-radius: 12px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.15);
+        transition: filter 0.3s ease;
+      }
+
       .blurred {
         filter: blur(5px);
         pointer-events: none;
       }
 
-      /* Checkmark verde centralizado */
+      /* Checkmark */
       .checkmark {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        font-size: 4rem;
+        font-size: 5rem;
         color: green;
         pointer-events: none;
+        user-select: none;
+        display: none;
       }
 
-      /* Container para posicionar checkmark sobre o QR code */
-      .qr-container {
-        position: relative;
-        display: inline-block;
+      label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        color: #333;
+        text-align: left;
       }
 
-      /* Mensagem verde confirmando pagamento */
+      /* Pix code textarea */
+      .pix-code {
+        width: 100%;
+        height: 80px;
+        resize: none;
+        font-family: monospace;
+        font-size: 1rem;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        background-color: #f4f4f4;
+        color: #222;
+      }
+
+      button {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        padding: 0.7rem 1.5rem;
+        font-size: 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.25s ease;
+      }
+      button:hover {
+        background-color: #218838;
+      }
+
       .message-confirmed {
-        margin-top: 1rem;
+        margin-top: 1.5rem;
         color: green;
         font-weight: bold;
         font-size: 1.2rem;
@@ -44,13 +122,13 @@
 
         <div class="qr-container">
           <img src="{{ QRCODE_IMG }}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
-          <div id="checkmark" class="checkmark" style="display:none;">✔️</div>
+          <div id="checkmark" class="checkmark">✔️</div>
         </div>
 
         <label for="pixCode">Código PIX para copiar:</label>
-        <textarea readonly class="pix-code" id="pixCode">{{ PIX_CODE }}</textarea>
+        <textarea readonly class="pix-code" id="pixCode" aria-label="Código PIX para copiar">{{ PIX_CODE }}</textarea>
 
-        <button onclick="copyPixCode()">Copiar Código</button>
+        <button type="button" onclick="copyPixCode()">Copiar Código</button>
 
         <div id="payment-status" class="message-confirmed" style="display:none;">
           Pagamento confirmado! Obrigado.
@@ -62,8 +140,17 @@
             const pixCode = document.getElementById('pixCode');
             pixCode.select();
             pixCode.setSelectionRange(0, 99999); // Para dispositivos móveis
-            document.execCommand('copy');
-            alert('Código PIX copiado!');
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Código PIX copiado!');
+                } else {
+                    alert('Não foi possível copiar automaticamente. Copie manualmente.');
+                }
+            } catch (err) {
+                alert('Erro ao copiar: ' + err);
+            }
+            window.getSelection().removeAllRanges(); // Remove seleção após copiar
         }
 
         const txid = "{{ TXID }}";  // Variável injetada pelo backend
@@ -72,30 +159,27 @@
         let polling;
         let isChecking = false;
 
-        // Função que consulta o status do pagamento via API e atualiza UI
         async function checkStatus() {
             if (isChecking) return; // evita chamadas simultâneas
             isChecking = true;
 
             try {
                 const res = await fetch(`/api/status/${txid}`);
-                
+
                 if (!res.ok) {
-                    // Se status 404, significa que o pagamento ainda não existe/foi iniciado
-                    // Você pode optar por mostrar mensagem ou deixar silencioso
+                    // 404 esperado enquanto pagamento não ocorre
                     isChecking = false;
                     return;
                 }
 
                 const data = await res.json();
 
-                // Confere se o status indica pagamento concluído
                 if (data.status && data.status.toUpperCase().startsWith("CONCL")) {
                     document.getElementById('qrcode-img').classList.add('blurred');
                     document.getElementById('checkmark').style.display = 'block';
                     document.getElementById('payment-status').style.display = 'block';
 
-                    clearInterval(polling); // para o polling para economizar recursos
+                    clearInterval(polling); // para polling
                 }
             } catch (e) {
                 console.error("Erro ao consultar status:", e);
@@ -104,9 +188,8 @@
             }
         }
 
-        // Inicia o polling para checar status a cada 1 segundo
         polling = setInterval(checkStatus, 1000);
-        checkStatus();  // checa imediatamente ao carregar a página
+        checkStatus();
     </script>
 </body>
 </html>
