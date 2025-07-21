@@ -192,6 +192,7 @@ def webhook_pix():
     print("Webhook recebido:", data)
 
     if not data:
+        print("JSON inválido recebido no webhook")
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
@@ -201,24 +202,28 @@ def webhook_pix():
         txid = data.get("txid")
 
     if not txid:
+        print("txid ausente no webhook")
         return jsonify({"error": "txid ausente"}), 400
 
     print(f"Recebido txid no webhook: {txid}")
 
     try:
         res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
+        if hasattr(res_check, "error") and res_check.error:
+            print("Erro ao verificar cobrança no Supabase:", res_check.error)
+            return jsonify({"error": "Erro ao verificar cobrança"}), 500
+
         if not res_check.data:
             print("txid não encontrado no banco:", txid)
             return jsonify({"error": "txid não encontrado"}), 404
 
-        res = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        print("Resposta Supabase:", res.status_code, res.data)
-
-        if hasattr(res, "error") and res.error:
-            print("Erro ao atualizar status no Supabase:", res.error)
+        res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
+        if hasattr(res_update, "error") and res_update.error:
+            print("Erro ao atualizar status no Supabase:", res_update.error)
             return jsonify({"error": "Erro ao atualizar status"}), 500
 
         print(f"Status atualizado para CONCLUIDO no txid {txid}")
+
     except Exception as e:
         print("Erro ao atualizar status:", e)
         return jsonify({"error": "Exceção ao atualizar status"}), 500
