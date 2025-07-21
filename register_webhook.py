@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # Substitua pela sua chave Pix (CNPJ, CPF ou TXID)
     CHAVE_PIX = "04763318000185"
     # Substitua pela sua URL pública para receber webhook
-    WEBHOOK_URL = "https://api-sicoob-renotur.onrender.com/webhook"
+    WEBHOOK_URL = "https://api-sicoob-renotur.onrender.com/webhook/pix"
     
     print(f"Registrando webhook para chave {CHAVE_PIX} na URL {WEBHOOK_URL}")
     register_webhook(CHAVE_PIX, WEBHOOK_URL)
