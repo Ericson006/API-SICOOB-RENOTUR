@@ -16,7 +16,7 @@ COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
 
 # Configurações Supabase (definidas nas variáveis de ambiente do Render ou local)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")  # <-- aqui
 
 print("SUPABASE_URL:", SUPABASE_URL)
 print("SUPABASE_KEY:", (SUPABASE_KEY[:6] + "...") if SUPABASE_KEY else None)
