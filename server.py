@@ -2,6 +2,7 @@ import os
 import requests
 import uuid
 import qrcode
+import re
 from flask import Flask, render_template, jsonify, request
 from supabase import create_client, Client
 
@@ -36,24 +37,42 @@ def get_access_token():
     resp.raise_for_status()
     return resp.json()["access_token"]
 
+# === VALIDAÇÃO TXID ===
+def validar_txid(txid):
+    return bool(re.fullmatch(r"[A-Za-z0-9]{26,35}", txid))
+
+# === BUSCAR COBRANÇA VIA API SICOOB ===
+def buscar_cobranca(txid, access_token):
+    url = f"{COB_URL}/{txid}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    response = requests.get(url, headers=headers, cert=(CERT_FILE, KEY_FILE))
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Erro ao buscar cobrança (TXID: {txid}):", response.status_code, response.text)
+        return None
+
 @app.route("/")
 def index():
     return render_template("gerador_pix.html")
 
-# === GERAR COBRANÇA ===
 @app.route("/api/gerar_cobranca", methods=["POST"])
 def api_gerar_cobranca():
     try:
         dados = request.get_json(silent=True) or {}
-        valor = dados.get("valor", "140.00")
+        valor = float(dados.get("valor", "140.00"))
         solicitacao = dados.get("solicitacao", "Pagamento referente à compra da passagem")
 
         token = get_access_token()
         txid = uuid.uuid4().hex.upper()[:32]
+        print(f"Gerando cobrança com TXID: {txid}")
 
         payload = {
             "calendario": {"expiracao": 3600},
-            "valor": {"original": f"{float(valor):.2f}"},
+            "valor": {"original": f"{valor:.2f}"},
             "chave": CHAVE_PIX,
             "solicitacaoPagador": solicitacao,
             "txid": txid
@@ -69,7 +88,6 @@ def api_gerar_cobranca():
         resp.raise_for_status()
         d = resp.json()
 
-        # Criar QR Code
         brcode = d["brcode"]
         img = qrcode.make(brcode)
         img_path = f"static/qrcodes/{txid}.png"
@@ -82,6 +100,7 @@ def api_gerar_cobranca():
             "status": "PENDENTE",
             "valor": valor,
             "chave_pix": CHAVE_PIX,
+            "descricao": solicitacao
         }).execute()
 
         return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
@@ -101,19 +120,36 @@ def api_gerar_cobranca():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# === EXIBE PÁGINA DE PAGAMENTO PIX ===
 @app.route("/pix/<txid>")
 def pix_page(txid):
+    print(f"Buscando cobrança para TXID: {txid}")
+
+    if not validar_txid(txid):
+        return "TXID inválido", 400
+
     try:
+        # Busca no Supabase
         res = supabase.table("cobrancas").select("*").eq("txid", txid).single().execute()
         res.raise_for_status()
         dados = res.data
     except Exception as e:
-        print("Erro ao buscar cobrança:", e)
+        print("Erro ao buscar cobrança no Supabase:", e)
         return "Erro ao buscar cobrança", 500
 
     if not dados:
-        return "Cobrança não encontrada", 404
+        return "Cobrança não encontrada no banco", 404
+
+    # Buscar também na API do Sicoob para validar status
+    try:
+        token = get_access_token()
+        cobranca_api = buscar_cobranca(txid, token)
+        if cobranca_api is None:
+            print("Cobrança não encontrada via API Sicoob para TXID:", txid)
+        else:
+            print("Cobrança encontrada via API Sicoob:", cobranca_api)
+    except Exception as e:
+        print("Erro ao buscar cobrança via API Sicoob:", e)
+        cobranca_api = None
 
     return render_template(
         "pix_template.html",
@@ -121,10 +157,10 @@ def pix_page(txid):
         PIX_CODE=dados["brcode"],
         STATUS=dados.get("status", "PENDENTE"),
         TXID=txid,
-        VALOR=dados.get("valor", "0.00")
+        VALOR=dados.get("valor", "0.00"),
+        COBRANCA_API=cobranca_api  # Se quiser usar no template
     )
 
-# === VERIFICAR STATUS ===
 @app.route("/api/status/<txid>")
 def api_status(txid):
     try:
@@ -137,7 +173,6 @@ def api_status(txid):
         print("Erro ao buscar status:", e)
         return jsonify({"status": "ERRO"}), 500
 
-# === WEBHOOK PIX ===
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json()
@@ -155,7 +190,6 @@ def webhook_pix():
 
     return "", 200
 
-# === EXECUTAR SERVIDOR ===
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
