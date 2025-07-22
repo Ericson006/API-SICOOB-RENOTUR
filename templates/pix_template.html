@@ -1,146 +1,211 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8" />
-    <title>Pagamento PIX</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f3f4f6;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        .container {
-            flex: 1;
-            max-width: 500px;
-            margin: 40px auto;
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            border: 2px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        label {
-            display: block;
-            margin-top: 15px;
-            font-weight: bold;
-        }
-        input[type="text"],
-        input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        button {
-            margin-top: 20px;
-            width: 100%;
-            padding: 12px;
-            background-color: #2d89ef;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #1b5dab;
-        }
-        #qrcode {
-            text-align: center;
-            margin-top: 20px;
-        }
-        #status {
-            text-align: center;
-            margin-top: 10px;
-            font-weight: bold;
-            color: green;
-        }
-        footer {
-            text-align: center;
-            padding: 15px;
-            font-size: 14px;
-            background-color: #e5e5e5;
-            color: #555;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Pagamento PIX</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+      color: #333;
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      color: #555;
+    }
+
+    .qr-container {
+      position: relative;
+      display: inline-block;
+      margin-bottom: 1rem;
+    }
+
+    .qrcode {
+      width: 250px;
+      height: 250px;
+      border-radius: 12px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.15);
+      transition: filter 0.3s ease;
+    }
+
+    .blurred {
+      filter: blur(5px);
+      pointer-events: none;
+    }
+
+    .checkmark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      width: 80px;
+      height: 80px;
+      background-color: rgba(40, 167, 69, 0.1);
+      border: 3px solid #28a745;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #28a745;
+      font-size: 2.5rem;
+      font-weight: bold;
+      box-shadow: 0 0 10px rgba(40, 167, 69, 0.4);
+      opacity: 0;
+      transition: opacity 0.4s ease, transform 0.3s ease;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .checkmark.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      color: #333;
+      text-align: left;
+    }
+
+    .pix-code {
+      width: 100%;
+      height: 80px;
+      resize: none;
+      font-family: monospace;
+      font-size: 1rem;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      background-color: #f4f4f4;
+      color: #222;
+    }
+
+    button {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 0.7rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.25s ease;
+    }
+
+    button:hover {
+      background-color: #218838;
+    }
+
+    .message-confirmed {
+      margin-top: 1.5rem;
+      color: green;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    footer {
+      margin-top: auto;
+      text-align: center;
+      padding: 1rem 0;
+      color: #888;
+      font-size: 0.9rem;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Pagamento via PIX</h1>
-        <form id="pix-form">
-            <label for="nome">Nome do Cliente:</label>
-            <input type="text" id="nome" name="nome" required>
+  <div class="container">
+    <h1>Pagamento PIX</h1>
+    <p>Escaneie o QR Code abaixo para pagar:</p>
 
-            <label for="valor">Valor (R$):</label>
-            <input type="number" id="valor" name="valor" step="0.01" required>
-
-            <button type="submit">Gerar Cobrança</button>
-        </form>
-        <div id="qrcode"></div>
-        <div id="status"></div>
+    <div class="qr-container">
+      <img src="{{ QRCODE_IMG }}" alt="QR Code PIX" class="qrcode" id="qrcode-img" />
+      <div id="checkmark" class="checkmark">✔</div>
     </div>
 
-    <footer>
-        &copy; {{ current_year }} Renotur. Todos os direitos reservados.
-    </footer>
+    <label for="pixCode">Código PIX para copiar:</label>
+    <textarea readonly class="pix-code" id="pixCode" aria-label="Código PIX para copiar">{{ PIX_CODE }}</textarea>
 
-    <script>
-        document.getElementById('pix-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const nome = document.getElementById('nome').value;
-            const valor = document.getElementById('valor').value;
+    <button type="button" onclick="copyPixCode()">Copiar Código</button>
 
-            const response = await fetch('/api/gerar-cobranca', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nome, valor })
-            });
+    <div id="payment-status" class="message-confirmed" style="display:none;">
+      Pagamento confirmado! Obrigado.
+    </div>
+  </div>
 
-            const data = await response.json();
-            const txid = data.txid;
-            const baseUrl = "https://api-sicoob-renotur.onrender.com";
-            const pixUrl = `${baseUrl}/pix/${txid}`;
+  <footer>
+    &copy; {{ current_year }} Renotur. Todos os direitos reservados.
+  </footer>
 
-            document.getElementById('qrcode').innerHTML = `
-                <p>Escaneie o QR Code ou clique no link abaixo:</p>
-                <img src="data:image/png;base64,${data.qrcode}" alt="QR Code PIX" />
-                <p><a href="${pixUrl}" target="_blank">${pixUrl}</a></p>
-            `;
+  <script>
+    function copyPixCode() {
+      const pixCode = document.getElementById('pixCode');
+      pixCode.select();
+      pixCode.setSelectionRange(0, 99999);
+      try {
+        const successful = document.execCommand('copy');
+        alert(successful ? 'Código PIX copiado!' : 'Não foi possível copiar automaticamente. Copie manualmente.');
+      } catch (err) {
+        alert('Erro ao copiar: ' + err);
+      }
+      window.getSelection().removeAllRanges();
+    }
 
-            document.getElementById('status').innerText = "Aguardando pagamento...";
+    const txid = "{{ TXID }}";
+    let isChecking = false;
 
-            const interval = setInterval(async () => {
-                try {
-                    const statusResp = await fetch(`/api/status/${txid}`);
-                    const statusData = await statusResp.json();
+    async function checkStatus() {
+      if (isChecking) return;
+      isChecking = true;
 
-                    if (statusData.status === 'CONCLUIDO') {
-                        document.getElementById('status').innerText = "Pagamento confirmado!";
-                        clearInterval(interval);
-                    }
-                } catch (_err) {
-                    // Ignora qualquer erro silenciosamente
-                }
-            }, 1000);
-        });
+      try {
+        const res = await fetch(`/api/status/${txid}`);
+        if (!res.ok) {
+          isChecking = false;
+          return;
+        }
 
-        // Pressionar Enter aciona o botão "Gerar Cobrança"
-        document.getElementById('pix-form').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this.querySelector('button[type="submit"]').click();
-            }
-        });
-    </script>
+        const data = await res.json();
+        if (data.status && data.status.trim().toUpperCase().startsWith("CONCL")) {
+          document.getElementById('qrcode-img').classList.add('blurred');
+          document.getElementById('checkmark').classList.add('show');
+          document.getElementById('payment-status').style.display = 'block';
+          clearInterval(pollingInterval);
+        }
+      } catch {
+        // Silenciar erros
+      } finally {
+        isChecking = false;
+      }
+    }
+
+    const pollingInterval = setInterval(checkStatus, 1000);
+    checkStatus();
+  </script>
 </body>
 </html>
