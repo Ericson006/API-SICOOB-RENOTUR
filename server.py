@@ -139,7 +139,7 @@ def api_status(txid):
     rec = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute().data
     return jsonify({"status": rec.get("status") if rec else "NAO_ENCONTRADO"})
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json(silent=True)
     print("[webhook_pix] Webhook recebido:", data)
