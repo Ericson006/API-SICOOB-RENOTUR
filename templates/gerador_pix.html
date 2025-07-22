@@ -112,10 +112,9 @@
   <div class="container">
     <div class="card">
       <h1>Gerar Cobrança PIX</h1>
-      <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01"/>
+      <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01" />
       <button id="btnGerar">Gerar Cobrança</button>
       <div id="status"></div>
-      <!-- Envolver o link PIX na caixa -->
       <div id="linkPIX" class="link-box" style="display:none;"></div>
     </div>
   </div>
@@ -170,7 +169,6 @@
         st.textContent = '✅ Cobrança gerada!';
         st.style.color = 'green';
 
-        // Corrigir o link, adicionando prefixo se necessário
         let linkFinal = data.link_pix;
         if (linkFinal.startsWith('/pix/')) {
           linkFinal = 'https://api-sicoob-renotur.onrender.com' + linkFinal;
@@ -184,6 +182,14 @@
         st.style.color = 'red';
         lk.style.display = 'none';
         console.error(err);
+      }
+    });
+
+    // Dispara clique do botão ao apertar Enter no input do valor
+    valorInput.addEventListener('keydown', event => {
+      if (event.key === "Enter") {
+        event.preventDefault(); // evita o envio de form padrão, se tiver
+        btn.click();
       }
     });
   </script>
