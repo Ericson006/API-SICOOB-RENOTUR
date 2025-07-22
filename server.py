@@ -58,8 +58,9 @@ def buscar_cobranca(txid, access_token):
     response = requests.get(url, headers=headers, cert=(CERT_FILE, KEY_FILE))
     print(f"[buscar_cobranca] Resposta status: {response.status_code}")
     if response.status_code == 200:
-        print(f"[buscar_cobranca] Dados da cobrança: {response.json()}")
-        return response.json()
+        data = response.json()
+        print(f"[buscar_cobranca] Dados da cobrança: {data}")
+        return data
     else:
         print(f"[buscar_cobranca] Erro ao buscar cobrança (TXID: {txid}): {response.status_code} {response.text}")
         return None
@@ -128,12 +129,9 @@ def api_gerar_cobranca():
                 "descricao": solicitacao
             }).execute()
 
-            if res.error:
-                print(f"[api_gerar_cobranca] ERRO ao salvar no Supabase: {res.error}")
-                return jsonify({"error": "Erro ao salvar cobrança no banco"}), 500
-
+            print(f"[api_gerar_cobranca] Supabase insert result: {res}")
             if not res.data:
-                print("[api_gerar_cobranca] ERRO: resposta vazia do Supabase")
+                print("[api_gerar_cobranca] ERRO: Sem dados retornados do Supabase")
                 return jsonify({"error": "Erro ao salvar cobrança no banco"}), 500
 
             print(f"[api_gerar_cobranca] Cobrança salva no Supabase: {res.data}")
@@ -185,10 +183,6 @@ def pix_page(txid):
     try:
         token = get_access_token()
         cobranca_api = buscar_cobranca(txid, token)
-        if cobranca_api is None:
-            print(f"[pix_page] Cobrança não encontrada via API Sicoob para TXID: {txid}")
-        else:
-            print(f"[pix_page] Cobrança via API Sicoob: {cobranca_api}")
     except Exception as e:
         print(f"[pix_page] Erro ao buscar cobrança via API Sicoob: {e}")
         cobranca_api = None
@@ -230,10 +224,10 @@ def webhook_pix():
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
-    if "pix" in data and isinstance(data["pix"], list) and len(data["pix"]) > 0:
+    if "pix" in data and isinstance(data["pix"], list) and data["pix"]:
         txid = data["pix"][0].get("txid")
-    elif "txid" in data:
-        txid = data.get("txid")
+    elif data.get("txid"):
+        txid = data["txid"]
 
     if not txid:
         print("[webhook_pix] txid ausente no webhook")
@@ -248,8 +242,9 @@ def webhook_pix():
             return jsonify({"error": "txid não encontrado"}), 404
 
         res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        if res_update.error:
-            print(f"[webhook_pix] Erro ao atualizar status no Supabase: {res_update.error}")
+        print(f"[webhook_pix] Supabase update result: {res_update}")
+        if not res_update.data:
+            print(f"[webhook_pix] ERRO: update não retornou dados")
             return jsonify({"error": "Erro ao atualizar status"}), 500
 
         print(f"[webhook_pix] Status atualizado para CONCLUIDO no txid {txid}")
