@@ -55,7 +55,8 @@ def register_sicoob_webhook():
     existing = resp_list.json()
     print("[register] Webhooks existentes:", existing)
 
-    desired = f"{BASE_URL}/webhook/pix"
+    # CORREÇÃO: Registrar webhook sem o '/pix' pois o Sicoob adiciona automaticamente '/pix' à URL
+    desired = f"{BASE_URL}/webhook"
     if not any(w.get("url") == desired for w in existing):
         payload = { "url": desired }
         resp = requests.post(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))
@@ -100,7 +101,8 @@ def api_gerar_cobranca():
         "chave": CHAVE_PIX,
         "solicitacaoPagador": solicit,
         "txid": txid,
-        "webhookUrl": f"{BASE_URL}/webhook/pix"
+        # Atualizado para refletir a URL sem '/pix'
+        "webhookUrl": f"{BASE_URL}/webhook"
     }
     resp = requests.post(COB_URL, json=payload,
                          headers={"Authorization":f"Bearer {token}"},
