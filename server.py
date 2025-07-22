@@ -12,7 +12,7 @@ KEY_FILE = "/etc/secrets/chave-privada-sem-senha.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
-WEBHOOK_MANAGE_URL = "https://api.sicoob.com.br/pix/api/v2/webhook/{PIX_KEY}"
+WEBHOOK_MANAGE_URL = "https://api.sicoob.com.br/pix/api/v2/webhook"
 CHAVE_PIX = "04763318000185"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
