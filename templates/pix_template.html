@@ -152,7 +152,6 @@
         const txid = "{{ TXID }}";  // Variável injetada pelo backend
         console.log("TXID:", txid);
 
-        let polling;
         let isChecking = false;
 
         async function checkStatus() {
@@ -179,8 +178,6 @@
                         document.getElementById('qrcode-img').classList.add('blurred');
                         document.getElementById('checkmark').style.display = 'block';
                         document.getElementById('payment-status').style.display = 'block';
-
-                        clearInterval(polling); // para polling
                     }
                 }
             } catch (e) {
@@ -190,8 +187,8 @@
             }
         }
 
-        polling = setInterval(checkStatus, 1000);
-        checkStatus();
+        // polling removido - não chama checkStatus automaticamente
+        // você pode chamar checkStatus() manualmente se quiser
     </script>
 </body>
 </html>
