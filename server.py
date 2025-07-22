@@ -43,41 +43,6 @@ def get_access_token():
     print(f"[get_access_token] Token recebido (len={len(token)})")
     return token
 
-def register_sicoob_webhook():
-    print("🔧 Executando tarefas de inicialização...")
-
-    try:
-        print("[register_sicoob_webhook] Iniciando registro do webhook...")
-        token = get_access_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-
-        resp_list = requests.get(WEBHOOK_MANAGE_URL, headers=headers, cert=(CERT_FILE, KEY_FILE))
-        resp_list.raise_for_status()
-        existing = resp_list.json()
-        print("[register] Resposta completa do GET:", existing)
-
-        desired = f"{BASE_URL}/webhook"
-        print(f"[register] URL desejada para webhook: {desired}")
-
-        already_exists = any(w.get("webhookUrl") == desired for w in existing.get("webhooks", []))
-
-        if not already_exists:
-            print(f"[register] Registrando webhook com URL: {desired}")
-            payload = {"webhookUrl": desired}
-            resp = requests.put(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))  # <-- CORRIGIDO AQUI
-            print(f"[register] Registrando webhook: {desired} — status {resp.status_code}")
-            resp.raise_for_status()
-        else:
-            print("✅ Webhook já registrado.")
-
-        print("✅ Webhook registrado com sucesso!")
-
-    except Exception as e:
-        print(f"❌ Falha ao registrar webhook: {e}")
-
 def validar_txid(txid):
     ok = bool(re.fullmatch(r"[A-Za-z0-9]{26,35}", txid))
     print(f"[validar_txid] {txid} → {ok}")
