@@ -184,6 +184,7 @@ def api_status(txid):
 
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
+    print("REQUISIÇÃO CHEGOU EM:", request.path)
     data = request.get_json(silent=True)
     print("Webhook recebido:", data)
 
