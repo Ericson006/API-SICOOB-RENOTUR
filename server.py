@@ -180,9 +180,12 @@ def webhook_pix():
 # ——— MAIN ———
 
 if __name__ == "__main__":
+    print("### Iniciando app e registrando webhook...")  # Garantir print inicial
     try:
         register_sicoob_webhook()
+        print("### Registro webhook finalizado com sucesso.")  # Confirmar registro
     except Exception as e:
         print("⚠️ register webhook falhou:", e)
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+
