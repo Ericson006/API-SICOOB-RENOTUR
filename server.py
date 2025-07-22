@@ -86,7 +86,7 @@ def buscar_cobranca(txid, token):
 
 # ——— ROTAS ———
 
-@app.before_first_request
+@app.before_request
 def startup_tasks():
     print("🔧 Executando tarefas de inicialização...")
     try:
