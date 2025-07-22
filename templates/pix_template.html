@@ -150,7 +150,6 @@
         }
 
         const txid = "{{ TXID }}";  // Variável injetada pelo backend
-        console.log("TXID:", txid);
 
         let isChecking = false;
 
@@ -168,27 +167,31 @@
                 }
 
                 const data = await res.json();
-                console.log("Status recebido:", data.status);
 
                 if (data.status) {
-                    // Normaliza o status para facilitar checagem
                     const statusNormalized = data.status.trim().toUpperCase();
 
                     if (statusNormalized.startsWith("CONCL")) {
                         document.getElementById('qrcode-img').classList.add('blurred');
                         document.getElementById('checkmark').style.display = 'block';
                         document.getElementById('payment-status').style.display = 'block';
+
+                        // Para o polling pois já confirmou
+                        clearInterval(pollingInterval);
                     }
                 }
-            } catch (e) {
-                console.error("Erro ao consultar status:", e);
+            } catch {
+                // silenciosamente ignora erros para não poluir console
             } finally {
                 isChecking = false;
             }
         }
 
-        // polling removido - não chama checkStatus automaticamente
-        // você pode chamar checkStatus() manualmente se quiser
+        // chama o polling a cada 1 segundo
+        const pollingInterval = setInterval(checkStatus, 1000);
+
+        // checa logo na carga da página
+        checkStatus();
     </script>
 </body>
 </html>
