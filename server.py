@@ -51,20 +51,36 @@ def register_sicoob_webhook():
         "Content-Type": "application/json"
     }
 
-    resp_list = requests.get(WEBHOOK_MANAGE_URL, headers=headers, cert=(CERT_FILE, KEY_FILE))
-    resp_list.raise_for_status()
-    existing = resp_list.json()
-    print("[register] Webhooks existentes:", existing)
+    try:
+        resp_list = requests.get(WEBHOOK_MANAGE_URL, headers=headers, cert=(CERT_FILE, KEY_FILE))
+        resp_list.raise_for_status()
+        existing = resp_list.json()
+        print("[register] Resposta completa do GET:", existing)
+    except Exception as e:
+        print(f"[register] Erro ao obter webhooks existentes: {e}")
+        return
 
     desired = f"{BASE_URL}/webhook"
     print(f"[register] URL desejada para webhook: {desired}")
 
-    if not any(w.get("url") == desired for w in existing):
+    # Se 'existing' for um dicionário com chave 'webhooks', por exemplo
+    if isinstance(existing, dict) and "webhooks" in existing:
+        webhooks = existing["webhooks"]
+    elif isinstance(existing, list):
+        webhooks = existing
+    else:
+        print("[register] Formato inesperado da resposta de webhooks.")
+        return
+
+    if not any(w.get("url") == desired for w in webhooks if isinstance(w, dict)):
         print(f"[register] Registrando webhook com URL: {desired}")
         payload = {"url": desired}
-        resp = requests.post(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))
-        print(f"[register] Registrando webhook: {desired} — status {resp.status_code}")
-        resp.raise_for_status()
+        try:
+            resp = requests.post(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))
+            print(f"[register] Registrando webhook: {desired} — status {resp.status_code}")
+            resp.raise_for_status()
+        except Exception as e:
+            print(f"[register] Falha ao registrar webhook: {e}")
     else:
         print("[register] Webhook já registrado corretamente.")
 
