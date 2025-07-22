@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Gerador PIX</title>
   <style>
     :root {
@@ -39,6 +40,7 @@
       text-align: center;
       width: 100%;
       max-width: 400px;
+      border: 2px solid var(--verde-escuro);
     }
 
     h1 {
@@ -78,7 +80,7 @@
     }
 
     #linkPIX a {
-      word-break: break-all;
+      word-break: break-word;
       color: var(--verde-escuro);
       text-decoration: underline;
       display: block;
@@ -92,30 +94,22 @@
       background-color: var(--cinza-claro);
       color: #666;
     }
-
-    .card {
-    background-color: var(--branco);
-    padding: 2.5rem;
-    border-radius: 16px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
-    text-align: center;
-    width: 100%;
-    max-width: 400px;
-
-    /* NOVO: borda sólida verde escura */
-    border: 2px solid var(--verde-escuro);
-  }
-
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Gerar Cobrança PIX</h1>
-    <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01"/>
-    <button id="btnGerar">Gerar Cobrança</button>
-    <div id="status"></div>
-    <div id="linkPIX"></div>
+  <div class="container">
+    <div class="card">
+      <h1>Gerar Cobrança PIX</h1>
+      <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01"/>
+      <button id="btnGerar">Gerar Cobrança</button>
+      <div id="status"></div>
+      <div id="linkPIX"></div>
+    </div>
   </div>
+
+  <footer>
+    © Renotur Transporte Turístico LTDA. 2025.
+  </footer>
 
   <script>
     const btn = document.getElementById('btnGerar'),
@@ -128,10 +122,12 @@
 
       if (isNaN(valor) || valor <= 0) {
         st.textContent = '❌ Digite um valor válido.';
+        st.style.color = 'red';
         return;
       }
 
       st.textContent = 'Gerando…';
+      st.style.color = '#888';
       lk.innerHTML = '';
 
       try {
@@ -157,9 +153,18 @@
         }
 
         st.textContent = '✅ Cobrança gerada!';
-        lk.innerHTML = `<a href="${data.link_pix}" target="_blank">${data.link_pix}</a>`;
+        st.style.color = 'green';
+
+        // Corrigir o link, adicionando prefixo se necessário
+        let linkFinal = data.link_pix;
+        if (linkFinal.startsWith('/pix/')) {
+          linkFinal = 'https://api-sicoob-renotur.onrender.com' + linkFinal;
+        }
+
+        lk.innerHTML = `<a href="${linkFinal}" target="_blank">${linkFinal}</a>`;
       } catch (err) {
         st.textContent = '❌ ' + err.message;
+        st.style.color = 'red';
         console.error(err);
       }
     });
