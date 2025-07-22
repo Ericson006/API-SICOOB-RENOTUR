@@ -44,6 +44,7 @@ def get_access_token():
     return token
 
 def register_sicoob_webhook():
+    print("[register_sicoob_webhook] Iniciando registro do webhook...")  # print inicial
     token = get_access_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -55,11 +56,12 @@ def register_sicoob_webhook():
     existing = resp_list.json()
     print("[register] Webhooks existentes:", existing)
 
-    # Corrigido para incluir /pix no final da URL para bater com o endpoint Flask
-    desired = f"{BASE_URL}/webhook/pix"
+    desired = f"{BASE_URL}/webhook"
+    print(f"[register] URL desejada para webhook: {desired}")
+
     if not any(w.get("url") == desired for w in existing):
-        print(f"[register] Registrando webhook com URL: {desired}")  # <-- aqui! Vai aparecer no start
-        payload = { "url": desired }
+        print(f"[register] Registrando webhook com URL: {desired}")
+        payload = {"url": desired}
         resp = requests.post(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))
         print(f"[register] Registrando webhook: {desired} — status {resp.status_code}")
         resp.raise_for_status()
