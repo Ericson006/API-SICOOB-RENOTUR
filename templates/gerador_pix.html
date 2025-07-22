@@ -79,12 +79,24 @@
       font-weight: 500;
     }
 
-    #linkPIX a {
+    /* Nova caixa para o link PIX */
+    .link-box {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background-color: var(--cinza-claro);
+      border: 1.5px solid var(--verde-escuro);
+      border-radius: 8px;
       word-break: break-word;
+      text-align: left;
+      font-family: monospace;
+      font-size: 0.95rem;
+    }
+
+    .link-box a {
       color: var(--verde-escuro);
       text-decoration: underline;
-      display: block;
-      margin-top: 0.5rem;
+      display: inline-block;
+      width: 100%;
     }
 
     footer {
@@ -103,7 +115,8 @@
       <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01"/>
       <button id="btnGerar">Gerar Cobrança</button>
       <div id="status"></div>
-      <div id="linkPIX"></div>
+      <!-- Envolver o link PIX na caixa -->
+      <div id="linkPIX" class="link-box" style="display:none;"></div>
     </div>
   </div>
 
@@ -123,11 +136,13 @@
       if (isNaN(valor) || valor <= 0) {
         st.textContent = '❌ Digite um valor válido.';
         st.style.color = 'red';
+        lk.style.display = 'none';
         return;
       }
 
       st.textContent = 'Gerando…';
       st.style.color = '#888';
+      lk.style.display = 'none';
       lk.innerHTML = '';
 
       try {
@@ -161,10 +176,13 @@
           linkFinal = 'https://api-sicoob-renotur.onrender.com' + linkFinal;
         }
 
-        lk.innerHTML = `<a href="${linkFinal}" target="_blank">${linkFinal}</a>`;
+        lk.innerHTML = `<a href="${linkFinal}" target="_blank" rel="noopener noreferrer">${linkFinal}</a>`;
+        lk.style.display = 'block';
+
       } catch (err) {
         st.textContent = '❌ ' + err.message;
         st.style.color = 'red';
+        lk.style.display = 'none';
         console.error(err);
       }
     });
