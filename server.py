@@ -55,8 +55,8 @@ def register_sicoob_webhook():
     existing = resp_list.json()
     print("[register] Webhooks existentes:", existing)
 
-    # CORREÇÃO: Registrar webhook sem o '/pix' pois o Sicoob adiciona automaticamente '/pix' à URL
-    desired = f"{BASE_URL}/webhook"
+    # Corrigido para incluir /pix no final da URL para bater com o endpoint Flask
+    desired = f"{BASE_URL}/webhook/pix"
     if not any(w.get("url") == desired for w in existing):
         payload = { "url": desired }
         resp = requests.post(WEBHOOK_MANAGE_URL, json=payload, headers=headers, cert=(CERT_FILE, KEY_FILE))
@@ -101,8 +101,8 @@ def api_gerar_cobranca():
         "chave": CHAVE_PIX,
         "solicitacaoPagador": solicit,
         "txid": txid,
-        # Atualizado para refletir a URL sem '/pix'
-        "webhookUrl": f"{BASE_URL}/webhook"
+        # Atualizado para refletir a URL com '/pix'
+        "webhookUrl": f"{BASE_URL}/webhook/pix"
     }
     resp = requests.post(COB_URL, json=payload,
                          headers={"Authorization":f"Bearer {token}"},
@@ -145,8 +145,10 @@ def webhook_pix():
     data = request.get_json(silent=True)
     print("[webhook_pix] Webhook recebido:", data)
     txid = None
-    if isinstance(data.get("pix"), list): txid = data["pix"][0].get("txid")
-    elif data.get("txid"): txid = data["txid"]
+    if isinstance(data.get("pix"), list):
+        txid = data["pix"][0].get("txid")
+    elif data.get("txid"):
+        txid = data["txid"]
 
     if not txid:
         print("[webhook_pix] txid ausente")
@@ -156,7 +158,7 @@ def webhook_pix():
     try:
         token = get_access_token()
         cobranca = buscar_cobranca(txid, token)
-        status_sicoob = cobranca.get("status")
+        status_sicoob = cobranca.get("status") if cobranca else None
         print(f"[webhook_pix] Status via Sicoob: {status_sicoob}")
 
         if status_sicoob == "CONCLUIDA":
