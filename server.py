@@ -60,16 +60,6 @@ def buscar_cobranca(txid, token):
     return None
 
 # ——— ROTAS ———
-
-@app.before_request
-def startup_tasks():
-    print("🔧 Executando tarefas de inicialização...")
-    try:
-        register_sicoob_webhook()
-        print("✅ Webhook registrado com sucesso!")
-    except Exception as e:
-        print("❌ Falha ao registrar webhook:", e)
-
 @app.route("/")
 def index():
     return render_template("gerador_pix.html")
