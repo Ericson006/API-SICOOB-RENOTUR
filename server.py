@@ -184,12 +184,11 @@ def api_status(txid):
 
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
-    print("REQUISIÇÃO CHEGOU EM:", request.path)
     data = request.get_json(silent=True)
-    print("Webhook recebido:", data)
+    print("🔔 Webhook recebido:", data)
 
     if not data:
-        print("JSON inválido recebido no webhook")
+        print("⚠️ JSON inválido recebido no webhook")
         return jsonify({"error": "JSON inválido"}), 400
 
     txid = None
@@ -199,26 +198,28 @@ def webhook_pix():
         txid = data.get("txid")
 
     if not txid:
-        print("txid ausente no webhook")
+        print("⚠️ txid ausente no webhook")
         return jsonify({"error": "txid ausente"}), 400
 
-    print(f"Recebido txid no webhook: {txid}")
+    print(f"📌 Recebido txid: {txid}")
 
     try:
+        # Verifica se o txid existe no Supabase
         res_check = supabase.table("cobrancas").select("txid").eq("txid", txid).single().execute()
+
         if not res_check.data:
-            print("txid não encontrado no banco:", txid)
+            print("❌ txid não encontrado no banco:", txid)
             return jsonify({"error": "txid não encontrado"}), 404
 
+        # Atualiza o status para CONCLUIDO
         res_update = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-        print(f"Status atualizado para CONCLUIDO no txid {txid}")
+        print(f"✅ Status atualizado para CONCLUIDO no txid {txid}")
 
     except Exception as e:
-        print("Erro ao atualizar status:", e)
+        print("🔥 Erro ao atualizar status:", e)
         return jsonify({"error": "Exceção ao atualizar status"}), 500
 
     return "", 200
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
