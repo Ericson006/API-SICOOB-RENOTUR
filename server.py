@@ -12,7 +12,7 @@ KEY_FILE = "/etc/secrets/chave-privada-sem-senha.pem"
 CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
-WEBHOOK_MANAGE_URL = "https://api.sicoob.com.br/pix/api/v2/webhook"  # CORRETO para V2
+WEBHOOK_MANAGE_URL = "https://api.sicoob.com.br/pix/api/v2/webhook"
 CHAVE_PIX = "04763318000185"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -50,13 +50,11 @@ def register_sicoob_webhook():
         "Content-Type": "application/json"
     }
 
-    # 1) Lista webhooks registrados
     resp_list = requests.get(WEBHOOK_MANAGE_URL, headers=headers, cert=(CERT_FILE, KEY_FILE))
     resp_list.raise_for_status()
     existing = resp_list.json()
     print("[register] Webhooks existentes:", existing)
 
-    # 2) Se não houver nenhum ou URL diferente, registra
     desired = f"{BASE_URL}/webhook/pix"
     if not any(w.get("url") == desired for w in existing):
         payload = { "url": desired }
@@ -110,12 +108,10 @@ def api_gerar_cobranca():
     resp.raise_for_status()
     brcode = resp.json().get("brcode")
 
-    # QR
     img = qrcode.make(brcode)
     img_path = f"static/qrcodes/{txid}.png"
     img.save(img_path)
 
-    # Supabase
     supabase.table("cobrancas").insert({
         "txid": txid, "brcode": brcode,
         "status": "PENDENTE", "valor": valor,
@@ -139,33 +135,48 @@ def pix_page(txid):
 
 @app.route("/api/status/<txid>")
 def api_status(txid):
-    # Você já tem polling aqui; mantém se quiser
     rec = supabase.table("cobrancas").select("status").eq("txid", txid).single().execute().data
     return jsonify({"status": rec.get("status") if rec else "NAO_ENCONTRADO"})
 
 @app.route("/webhook/pix", methods=["POST"])
 def webhook_pix():
     data = request.get_json(silent=True)
-    print("[webhook_pix] recebido:", data)
+    print("[webhook_pix] Webhook recebido:", data)
     txid = None
     if isinstance(data.get("pix"), list): txid = data["pix"][0].get("txid")
     elif data.get("txid"): txid = data["txid"]
-    if not txid: return jsonify({"error":"txid ausente"}),400
 
-    # atualiza
-    upd = supabase.table("cobrancas") \
-                   .update({"status":"CONCLUIDO"}) \
-                   .eq("txid",txid).execute()
-    print("[webhook_pix] update result:", upd)
-    return ("",200) if upd.data else (jsonify({"error":"falha"}),500)
+    if not txid:
+        print("[webhook_pix] txid ausente")
+        return jsonify({"error":"txid ausente"}), 400
+
+    # Confirma status via Sicoob
+    try:
+        token = get_access_token()
+        cobranca = buscar_cobranca(txid, token)
+        status_sicoob = cobranca.get("status")
+        print(f"[webhook_pix] Status via Sicoob: {status_sicoob}")
+
+        if status_sicoob == "CONCLUIDA":
+            upd = supabase.table("cobrancas") \
+                          .update({"status":"CONCLUIDO"}) \
+                          .eq("txid", txid).execute()
+            print("[webhook_pix] Supabase atualizado:", upd)
+            return "", 200
+        else:
+            print(f"[webhook_pix] Status não é CONCLUIDA ({status_sicoob})")
+            return jsonify({"msg": f"Status não é CONCLUIDA: {status_sicoob}"}), 202
+
+    except Exception as e:
+        print(f"[webhook_pix] Erro ao confirmar status: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # ——— MAIN ———
 
 if __name__ == "__main__":
-    # registra webhook corretamente em V2
     try:
         register_sicoob_webhook()
     except Exception as e:
         print("⚠️ register webhook falhou:", e)
-    port = int(os.getenv("PORT",5000))
+    port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
