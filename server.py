@@ -190,12 +190,14 @@ def webhook_pix():
             return "", 200
         else:
             print(f"[webhook_pix] Status não é CONCLUIDA ({status_sicoob})")
-            return jsonify({"msg": f"Erro ao processar a requisição: {error}"})
+            return jsonify({"msg": f"Status não é CONCLUIDA: {status_sicoob}"}), 202
 
+    except Exception as e:
+        print(f"[webhook_pix] Erro ao confirmar status: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # ——— MAIN ———
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-
