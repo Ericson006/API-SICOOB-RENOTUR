@@ -48,6 +48,16 @@ def validar_txid(txid):
     print(f"[validar_txid] {txid} → {ok}")
     return ok
 
+def validar_telefone(telefone: str) -> bool:
+    # Remove espaços, traços e parênteses
+    telefone = re.sub(r'[\s\-\(\)]', '', telefone)
+
+    # Verifica se tem apenas dígitos e se tem entre 10 e 13 caracteres (com DDI)
+    return telefone.isdigit() and 10 <= len(telefone) <= 13
+
+def enviar_msg_whatsapp(telefone: str, mensagem: str):
+    print(f"[WhatsApp] Enviando mensagem para {telefone}: {mensagem}")
+
 def buscar_cobranca(txid, token):
     url = f"{COB_URL}/{txid}"
     headers = { "Authorization": f"Bearer {token}", "Content-Type": "application/json" }
@@ -71,6 +81,10 @@ def api_gerar_cobranca():
     solicit = dados.get("solicitacao", "")
     telefone = dados.get("telefone_cliente", None)  # novo campo telefone
     
+    # Validação simples do telefone (você deve definir a função validar_telefone)
+    if telefone and not validar_telefone(telefone):
+        return jsonify({"erro": "Telefone inválido"}), 400
+
     token = get_access_token()
     txid = uuid.uuid4().hex.upper()[:32]
 
@@ -83,7 +97,7 @@ def api_gerar_cobranca():
         "webhookUrl": f"{BASE_URL}/webhook"
     }
     resp = requests.post(COB_URL, json=payload,
-                         headers={"Authorization":f"Bearer {token}"},
+                         headers={"Authorization": f"Bearer {token}"},
                          cert=(CERT_FILE, KEY_FILE))
     resp.raise_for_status()
     brcode = resp.json().get("brcode")
@@ -92,18 +106,19 @@ def api_gerar_cobranca():
     img_path = f"static/qrcodes/{txid}.png"
     img.save(img_path)
 
-    supabase.table("cobrancas").insert({
-        "txid": txid, "brcode": brcode,
-        "status": "PENDENTE", "valor": valor,
-        "chave_pix": CHAVE_PIX, "descricao": solicit
-    }).execute()
-
+    dados_insert = {
+        "txid": txid,
+        "brcode": brcode,
+        "status": "PENDENTE",
+        "valor": valor,
+        "chave_pix": CHAVE_PIX,
+        "descricao": solicit
     }
+
     if telefone:
         dados_insert["telefone_cliente"] = telefone
 
     supabase.table("cobrancas").insert(dados_insert).execute()
-
 
     return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
@@ -159,6 +174,19 @@ def webhook_pix():
     except Exception as e:
         print(f"[webhook_pix] Erro ao confirmar status: {e}")
         return jsonify({"error": str(e)}), 500
+
+        # Buscar dados da cobrança com base no txid
+        response = supabase.table("cobrancas").select("telefone_cliente").eq("txid", txid).execute()
+
+        if response.data and len(response.data) > 0:
+            telefone_cliente = response.data[0].get("telefone_cliente")
+            if telefone_cliente:
+                # Aqui, a mensagem pode ser customizada
+                mensagem = f"Olá! Seu pagamento via PIX foi confirmado com sucesso. Obrigado por comprar com a Renotur. 🚌✨"
+
+                # Enviar para o bot WhatsApp (a função será criada no próximo passo)
+                enviar_msg_whatsapp(telefone_cliente, mensagem)
+
 
 # ——— MAIN ———
 
