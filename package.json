@@ -4,8 +4,8 @@
   "description": "Bot de WhatsApp integrado com API PIX e Supabase (CommonJS)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.cjs",
+    "dev": "nodemon index.cjs"
   },
   "author": "Seu Nome",
   "license": "MIT",
