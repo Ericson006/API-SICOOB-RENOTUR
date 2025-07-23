@@ -19,6 +19,7 @@ Este projeto foi desenvolvido para automatizar o processo de geração e verific
 - HTML/CSS/JS (Frontend)
 - Supabase (banco de dados)
 - API Sicoob Pix (com certificado digital A1)
+- Node.js
 
 ## Como executar localmente
 
