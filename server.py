@@ -69,6 +69,8 @@ def api_gerar_cobranca():
     dados = request.json or {}
     valor = float(dados.get("valor", 140.00))
     solicit = dados.get("solicitacao", "")
+    telefone = dados.get("telefone_cliente", None)  # novo campo telefone
+    
     token = get_access_token()
     txid = uuid.uuid4().hex.upper()[:32]
 
@@ -95,6 +97,13 @@ def api_gerar_cobranca():
         "status": "PENDENTE", "valor": valor,
         "chave_pix": CHAVE_PIX, "descricao": solicit
     }).execute()
+
+    }
+    if telefone:
+        dados_insert["telefone_cliente"] = telefone
+
+    supabase.table("cobrancas").insert(dados_insert).execute()
+
 
     return jsonify({"txid": txid, "link_pix": f"/pix/{txid}"})
 
