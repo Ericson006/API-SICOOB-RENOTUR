@@ -60,6 +60,62 @@ async function salvarSessaoNoSupabase(sessao) {
   }
 }
 
+// Função para verificar cobranças concluídas e enviar mensagens
+async function verificarCobrancasEEnviar() {
+  if (!whatsappReady) {
+    console.log('⏳ Bot ainda não conectado, aguardando...');
+    return;
+  }
+
+  console.log('🔎 Verificando cobranças concluídas para envio de mensagens...');
+
+  const { data: cobrancas, error } = await supabase
+    .from('cobrancas')
+    .select('txid, status, telefone_cliente, mensagem_confirmacao, mensagem_enviada')
+    .eq('status', 'concluido')
+    .eq('mensagem_enviada', false);
+
+  if (error) {
+    console.error('❌ Erro ao buscar cobranças:', error);
+    return;
+  }
+
+  if (!cobrancas || cobrancas.length === 0) {
+    console.log('ℹ️ Nenhuma cobrança nova para enviar mensagem.');
+    return;
+  }
+
+  for (const cobranca of cobrancas) {
+    try {
+      let chatId = cobranca.telefone_cliente;
+      if (!chatId.endsWith('@c.us')) {
+        chatId += '@c.us';
+      }
+
+      const contato = await client.getNumberId(chatId);
+      if (!contato) {
+        console.log(`⚠️ Número não encontrado no WhatsApp: ${cobranca.telefone_cliente}`);
+        continue;
+      }
+
+      await client.sendMessage(contato._serialized, cobranca.mensagem_confirmacao);
+      console.log(`✅ Mensagem enviada para ${cobranca.telefone_cliente} referente à cobrança ${cobranca.txid}`);
+
+      // Atualiza no Supabase que a mensagem já foi enviada para essa cobrança
+      const { error: updateError } = await supabase
+        .from('cobrancas')
+        .update({ mensagem_enviada: true })
+        .eq('txid', cobranca.txid);
+
+      if (updateError) {
+        console.error('❌ Erro ao atualizar status mensagem_enviada:', updateError);
+      }
+    } catch (err) {
+      console.error('❌ Erro ao enviar mensagem para cobrança:', cobranca.txid, err);
+    }
+  }
+}
+
 // Inicialização do cliente com a sessão carregada
 (async () => {
   const sessionData = await carregarSessaoDoSupabase();
@@ -100,6 +156,9 @@ async function salvarSessaoNoSupabase(sessao) {
     whatsappReady = true;
     qrCodeDataURL = null;
     console.log('✅ Cliente WhatsApp pronto!');
+
+    // Começa a verificar cobranças periodicamente após o WhatsApp estar pronto
+    setInterval(verificarCobrancasEEnviar, 60 * 1000);
   });
 
   client.on('loading_screen', (percent, message) => {
