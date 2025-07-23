@@ -1,7 +1,7 @@
 {
-  "name": "whatsapp-bot-js",
+  "name": "whatsapp-bot-cjs",
   "version": "1.0.0",
-  "description": "Bot de WhatsApp integrado com API PIX e Supabase",
+  "description": "Bot de WhatsApp integrado com API PIX e Supabase (CommonJS)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -16,12 +16,11 @@
     "dotenv": "^16.3.1",
     "cors": "^2.8.5",
     "qrcode": "^1.5.1",
-    "@supabase/supabase-js": "^2.39.7", 
+    "@supabase/supabase-js": "^2.39.7",
     "form-data": "^4.0.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^2.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
-  },
-  "type": "module"
+  }
 }
