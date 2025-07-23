@@ -41,6 +41,7 @@
       width: 100%;
       max-width: 400px;
       border: 2px solid var(--verde-escuro);
+      box-sizing: border-box;
     }
 
     h1 {
@@ -48,14 +49,36 @@
       margin-bottom: 1.5rem;
     }
 
-    input[type="number"] {
+    /* Container para cada input com label */
+    .input-group {
+      margin-bottom: 1rem;
+      text-align: left;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+      color: var(--verde-escuro);
+      font-size: 0.95rem;
+    }
+
+    input[type="number"],
+    input[type="tel"] {
       width: 100%;
       padding: 0.75rem;
       font-size: 1rem;
-      margin-bottom: 1.2rem;
       border: 1px solid #ccc;
       border-radius: 8px;
       box-sizing: border-box;
+      transition: border-color 0.3s;
+    }
+
+    input[type="number"]:focus,
+    input[type="tel"]:focus {
+      border-color: var(--verde);
+      outline: none;
+      box-shadow: 0 0 4px var(--verde);
     }
 
     button {
@@ -67,6 +90,8 @@
       font-size: 1rem;
       cursor: pointer;
       transition: background 0.3s;
+      width: 100%;
+      margin-top: 0.5rem;
     }
 
     button:hover {
@@ -79,7 +104,7 @@
       font-weight: 500;
     }
 
-    /* Nova caixa para o link PIX */
+    /* Caixa para o link PIX */
     .link-box {
       margin-top: 1rem;
       padding: 0.75rem 1rem;
@@ -112,18 +137,23 @@
   <div class="container">
     <div class="card">
       <h1>Gerar Cobrança PIX</h1>
-      <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01" />
-      <input id="telefone" type="tel" placeholder="Telefone do cliente (ex: 559999999999)" pattern="\d{10,13}" />
+      
+      <div class="input-group">
+        <label for="valor">Valor (R$)</label>
+        <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01" />
+      </div>
+
+      <div class="input-group">
+        <label for="telefone">Telefone do cliente</label>
+        <input id="telefone" type="tel" placeholder="Ex: 559999999999" pattern="\d{10,13}" />
+      </div>
+      
       <button id="btnGerar">Gerar Cobrança</button>
+
       <div id="status"></div>
       <div id="linkPIX" class="link-box" style="display:none;"></div>
     </div>
   </div>
-
-  <footer>
-    © Renotur Transporte Turístico LTDA. 2025.
-  </footer>
-
   <script>
 const btn = document.getElementById('btnGerar'),
       st = document.getElementById('status'),
