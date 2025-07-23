@@ -161,52 +161,36 @@ def webhook_pix():
         print("[webhook_pix] txid ausente")
         return jsonify({"error":"txid ausente"}), 400
 
-    # Confirma status via Sicoob
     try:
+        # Confirma status via Sicoob
         token = get_access_token()
         cobranca = buscar_cobranca(txid, token)
         status_sicoob = cobranca.get("status") if cobranca else None
         print(f"[webhook_pix] Status via Sicoob: {status_sicoob}")
 
         if status_sicoob == "CONCLUIDA":
+            # Atualiza na Supabase
             upd = supabase.table("cobrancas") \
                           .update({"status":"CONCLUIDO"}) \
                           .eq("txid", txid).execute()
             print("[webhook_pix] Supabase atualizado:", upd)
+
+            # Buscar telefone do cliente e valor
+            rec = supabase.table("cobrancas") \
+                          .select("telefone_cliente, valor") \
+                          .eq("txid", txid).single().execute()
+            
+            telefone = rec.data.get("telefone_cliente") if rec.data else None
+            valor = rec.data.get("valor") if rec.data else None
+
+            if telefone:
+                mensagem = f"Olá! Seu pagamento via PIX no valor de R$ {valor:.2f} foi confirmado. Obrigado por comprar com a Renotur! 🚌✨"
+                enviar_msg_whatsapp(telefone, mensagem)
+
             return "", 200
         else:
             print(f"[webhook_pix] Status não é CONCLUIDA ({status_sicoob})")
-            return jsonify({"msg": f"Status não é CONCLUIDA: {status_sicoob}"}), 202
-
-    except Exception as e:
-        print(f"[webhook_pix] Erro ao confirmar status: {e}")
-        return jsonify({"error": str(e)}), 500
-
-        # Buscar dados da cobrança com base no txid
-        response = supabase.table("cobrancas").select("telefone_cliente").eq("txid", txid).execute()
-
-        if response.data and len(response.data) > 0:
-            telefone_cliente = response.data[0].get("telefone_cliente")
-            if telefone_cliente:
-                # Aqui, a mensagem pode ser customizada
-                mensagem = f"Olá! Seu pagamento via PIX foi confirmado com sucesso. Obrigado por comprar com a Renotur. 🚌✨"
-
-                # Enviar para o bot WhatsApp (a função será criada no próximo passo)
-                enviar_msg_whatsapp(telefone_cliente, mensagem)
-        if status_sicoob == "CONCLUIDA":
-            upd = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
-            print("[webhook_pix] Supabase atualizado:", upd)
-        
-            # Buscar telefone do cliente da cobrança
-            rec = supabase.table("cobrancas").select("telefone_cliente, valor").eq("txid", txid).single().execute()
-            telefone = rec.data.get("telefone_cliente") if rec.data else None
-            valor = rec.data.get("valor") if rec.data else None
-        
-            if telefone:
-                mensagem = f"Olá! Seu pagamento no valor de R$ {valor:.2f} foi confirmado. Obrigado por comprar com a Renotur! 🚌✨"
-                enviar_msg_whatsapp(telefone, mensagem)
-        
-            return "", 200
+            return jsonify({"msg": f"S
 
 
 # ——— MAIN ———
