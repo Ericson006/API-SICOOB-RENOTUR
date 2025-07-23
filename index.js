@@ -47,6 +47,10 @@ client.on('ready', () => {
     console.log('✅ Cliente WhatsApp pronto!');
 });
 
+client.on('loading_screen', (percent, message) => {
+  console.log(`🔄 Sincronizando: ${percent}% - ${message}`);
+});
+
 client.initialize();
 
 // Rota principal mostra status e QR code embutido (quando necessário)
