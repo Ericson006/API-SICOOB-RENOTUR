@@ -113,6 +113,7 @@
     <div class="card">
       <h1>Gerar Cobrança PIX</h1>
       <input id="valor" type="number" placeholder="Digite o valor em reais" min="0.01" step="0.01" />
+      <input id="telefone" type="tel" placeholder="Telefone do cliente (ex: 559999999999)" pattern="\d{10,13}" />
       <button id="btnGerar">Gerar Cobrança</button>
       <div id="status"></div>
       <div id="linkPIX" class="link-box" style="display:none;"></div>
@@ -124,74 +125,84 @@
   </footer>
 
   <script>
-    const btn = document.getElementById('btnGerar'),
-          st  = document.getElementById('status'),
-          lk  = document.getElementById('linkPIX'),
-          valorInput = document.getElementById('valor');
+const btn = document.getElementById('btnGerar'),
+      st = document.getElementById('status'),
+      lk = document.getElementById('linkPIX'),
+      valorInput = document.getElementById('valor'),
+      telefoneInput = document.getElementById('telefone');  // novo input
 
-    btn.addEventListener('click', async () => {
-      const valor = parseFloat(valorInput.value);
+btn.addEventListener('click', async () => {
+  const valor = parseFloat(valorInput.value);
+  const telefone = telefoneInput.value.trim();
 
-      if (isNaN(valor) || valor <= 0) {
-        st.textContent = '❌ Digite um valor válido.';
-        st.style.color = 'red';
-        lk.style.display = 'none';
-        return;
-      }
+  if (isNaN(valor) || valor <= 0) {
+    st.textContent = '❌ Digite um valor válido.';
+    st.style.color = 'red';
+    lk.style.display = 'none';
+    return;
+  }
 
-      st.textContent = 'Gerando…';
-      st.style.color = '#888';
-      lk.style.display = 'none';
-      lk.innerHTML = '';
+  if (!telefone.match(/^\d{10,13}$/)) {
+    st.textContent = '❌ Telefone inválido. Use apenas números, sem espaços.';
+    st.style.color = 'red';
+    lk.style.display = 'none';
+    return;
+  }
 
-      try {
-        const res = await fetch('/api/gerar_cobranca', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ valor })
-        });
+  st.textContent = 'Gerando…';
+  st.style.color = '#888';
+  lk.style.display = 'none';
+  lk.innerHTML = '';
 
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`Resposta inválida do servidor (status ${res.status})`);
-        }
-
-        if (!res.ok) {
-          const msg = data.detail?.httpMessage || data.error || `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
-
-        st.textContent = '✅ Cobrança gerada!';
-        st.style.color = 'green';
-
-        let linkFinal = data.link_pix;
-        if (linkFinal.startsWith('/pix/')) {
-          linkFinal = 'https://api-sicoob-renotur.onrender.com' + linkFinal;
-        }
-
-        lk.innerHTML = `<a href="${linkFinal}" target="_blank" rel="noopener noreferrer">${linkFinal}</a>`;
-        lk.style.display = 'block';
-
-      } catch (err) {
-        st.textContent = '❌ ' + err.message;
-        st.style.color = 'red';
-        lk.style.display = 'none';
-        console.error(err);
-      }
+  try {
+    const res = await fetch('/api/gerar_cobranca', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ valor, telefone_cliente: telefone })  // enviando telefone
     });
 
-    // Dispara clique do botão ao apertar Enter no input do valor
-    valorInput.addEventListener('keydown', event => {
-      if (event.key === "Enter") {
-        event.preventDefault(); // evita o envio de form padrão, se tiver
-        btn.click();
-      }
-    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Resposta inválida do servidor (status ${res.status})`);
+    }
+
+    if (!res.ok) {
+      const msg = data.detail?.httpMessage || data.error || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    st.textContent = '✅ Cobrança gerada!';
+    st.style.color = 'green';
+
+    let linkFinal = data.link_pix;
+    if (linkFinal.startsWith('/pix/')) {
+      linkFinal = 'https://api-sicoob-renotur.onrender.com' + linkFinal;
+    }
+
+    lk.innerHTML = `<a href="${linkFinal}" target="_blank" rel="noopener noreferrer">${linkFinal}</a>`;
+    lk.style.display = 'block';
+
+  } catch (err) {
+    st.textContent = '❌ ' + err.message;
+    st.style.color = 'red';
+    lk.style.display = 'none';
+    console.error(err);
+  }
+});
+
+// Dispara clique do botão ao apertar Enter no input do valor
+valorInput.addEventListener('keydown', event => {
+  if (event.key === "Enter") {
+    event.preventDefault(); // evita o envio de form padrão, se tiver
+    btn.click();
+  }
+});
+
   </script>
 </body>
 </html>
