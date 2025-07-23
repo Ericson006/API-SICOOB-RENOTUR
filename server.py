@@ -56,7 +56,14 @@ def validar_telefone(telefone: str) -> bool:
     return telefone.isdigit() and 10 <= len(telefone) <= 13
 
 def enviar_msg_whatsapp(telefone: str, mensagem: str):
-    print(f"[WhatsApp] Enviando mensagem para {telefone}: {mensagem}")
+    url_bot_api = os.getenv("BOT_WHATSAPP_API_URL", "http://localhost:3000/enviar")
+    params = {"numero": telefone, "mensagem": mensagem}
+    try:
+        resp = requests.get(url_bot_api, params=params, timeout=10)
+        resp.raise_for_status()
+        print(f"[WhatsApp] Mensagem enviada para {telefone}")
+    except Exception as e:
+        print(f"[WhatsApp] Falha ao enviar mensagem para {telefone}: {e}")
 
 def buscar_cobranca(txid, token):
     url = f"{COB_URL}/{txid}"
@@ -186,6 +193,20 @@ def webhook_pix():
 
                 # Enviar para o bot WhatsApp (a função será criada no próximo passo)
                 enviar_msg_whatsapp(telefone_cliente, mensagem)
+        if status_sicoob == "CONCLUIDA":
+            upd = supabase.table("cobrancas").update({"status": "CONCLUIDO"}).eq("txid", txid).execute()
+            print("[webhook_pix] Supabase atualizado:", upd)
+        
+            # Buscar telefone do cliente da cobrança
+            rec = supabase.table("cobrancas").select("telefone_cliente, valor").eq("txid", txid).single().execute()
+            telefone = rec.data.get("telefone_cliente") if rec.data else None
+            valor = rec.data.get("valor") if rec.data else None
+        
+            if telefone:
+                mensagem = f"Olá! Seu pagamento no valor de R$ {valor:.2f} foi confirmado. Obrigado por comprar com a Renotur! 🚌✨"
+                enviar_msg_whatsapp(telefone, mensagem)
+        
+            return "", 200
 
 
 # ——— MAIN ———
