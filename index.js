@@ -4,10 +4,14 @@ const QRCode = require('qrcode');
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Servir arquivos estáticos da pasta static
+app.use('/static', express.static(path.join(__dirname, 'static')));
 
 let whatsappReady = false;
 
@@ -20,13 +24,18 @@ const client = new Client({
     }
 });
 
-// Gera QR Code no terminal e salva como imagem
+// Gera QR Code no terminal e salva como imagem PNG na pasta static/qrlogin/
 client.on('qr', async (qr) => {
     console.log('📲 Escaneie o QR Code com o WhatsApp:');
     qrcode.generate(qr, { small: true });
 
     try {
-        await QRCode.toFile('qrcode.png', qr, {
+        const dir = path.join(__dirname, 'static/qrlogin');
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        const filePath = path.join(dir, 'qrlogin.png');
+        await QRCode.toFile(filePath, qr, {
             width: 300,
             margin: 2,
             color: {
@@ -34,7 +43,7 @@ client.on('qr', async (qr) => {
                 light: '#FFFFFF'
             }
         });
-        console.log('🖼️ QR Code salvo como qrcode.png');
+        console.log('🖼️ QR Code salvo em:', filePath);
     } catch (err) {
         console.error('❌ Erro ao salvar QR Code:', err);
     }
@@ -48,9 +57,19 @@ client.on('ready', () => {
 
 client.initialize();
 
-// Rota simples
+// Rota simples para testar se o bot está rodando
 app.get('/', (req, res) => {
     res.send('✅ Bot WhatsApp está rodando!');
+});
+
+// Rota para exibir a imagem do QR code no navegador
+app.get('/qrlogin', (req, res) => {
+    const qrPath = path.join(__dirname, 'static/qrlogin/qrlogin.png');
+    if (fs.existsSync(qrPath)) {
+        res.sendFile(qrPath);
+    } else {
+        res.status(404).send('QR Code ainda não gerado. Por favor, aguarde o código aparecer no terminal e gere o PNG.');
+    }
 });
 
 // Enviar mensagem via GET ou POST
