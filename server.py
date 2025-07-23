@@ -190,7 +190,7 @@ def webhook_pix():
             return "", 200
         else:
             print(f"[webhook_pix] Status não é CONCLUIDA ({status_sicoob})")
-            return jsonify({"msg": f"S
+            return jsonify({"msg": f"Erro ao processar a requisição: {error}"})
 
 
 # ——— MAIN ———
