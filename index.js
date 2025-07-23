@@ -3,17 +3,13 @@ const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Servir arquivos estáticos da pasta static
-app.use('/static', express.static(path.join(__dirname, 'static')));
-
 let whatsappReady = false;
+let qrCodeDataURL = null; // Guarda o QR code em base64 para mostrar no frontend
 
 // Inicializa cliente WhatsApp
 const client = new Client({
@@ -24,18 +20,13 @@ const client = new Client({
     }
 });
 
-// Gera QR Code no terminal e salva como imagem PNG na pasta static/qrlogin/
+// Gera QR Code no terminal e também gera base64 para frontend
 client.on('qr', async (qr) => {
     console.log('📲 Escaneie o QR Code com o WhatsApp:');
     qrcode.generate(qr, { small: true });
 
     try {
-        const dir = path.join(__dirname, 'static/qrlogin');
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        const filePath = path.join(dir, 'qrlogin.png');
-        await QRCode.toFile(filePath, qr, {
+        qrCodeDataURL = await QRCode.toDataURL(qr, {
             width: 300,
             margin: 2,
             color: {
@@ -43,33 +34,83 @@ client.on('qr', async (qr) => {
                 light: '#FFFFFF'
             }
         });
-        console.log('🖼️ QR Code salvo em:', filePath);
+        console.log('🖼️ QR Code gerado para frontend (base64)');
     } catch (err) {
-        console.error('❌ Erro ao salvar QR Code:', err);
+        console.error('❌ Erro ao gerar QR Code base64:', err);
     }
 });
 
 // Confirma que cliente está pronto
 client.on('ready', () => {
     whatsappReady = true;
+    qrCodeDataURL = null; // Bot conectado, não precisa mais do QR
     console.log('✅ Cliente WhatsApp pronto!');
 });
 
 client.initialize();
 
-// Rota simples para testar se o bot está rodando
+// Rota principal mostra status e QR code embutido (quando necessário)
 app.get('/', (req, res) => {
-    res.send('✅ Bot WhatsApp está rodando!');
-});
+    let html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Login WhatsApp Bot</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                margin: 0;
+                background: #f5f5f5;
+            }
+            h1 { color: #2e7d32; }
+            #qr {
+                margin-top: 20px;
+                border: 2px solid #2e7d32;
+                padding: 10px;
+                background: white;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+            #status {
+                margin-top: 15px;
+                font-size: 1.1rem;
+                color: ${whatsappReady ? '#2e7d32' : '#c62828'};
+            }
+            #instructions {
+                margin-top: 10px;
+                font-size: 0.9rem;
+                color: #555;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>WhatsApp Bot - Autenticação</h1>
+        <div id="status">${whatsappReady ? '✅ Bot pronto e conectado!' : '⌛ Aguardando QR Code para autenticação...'}</div>
+    `;
 
-// Rota para exibir a imagem do QR code no navegador
-app.get('/qrlogin', (req, res) => {
-    const qrPath = path.join(__dirname, 'static/qrlogin/qrlogin.png');
-    if (fs.existsSync(qrPath)) {
-        res.sendFile(qrPath);
-    } else {
-        res.status(404).send('QR Code ainda não gerado. Por favor, aguarde o código aparecer no terminal e gere o PNG.');
+    if (!whatsappReady && qrCodeDataURL) {
+        html += `<img id="qr" src="${qrCodeDataURL}" alt="QR Code para login" width="300" height="300" />`;
+        html += `<div id="instructions">Escaneie o QR Code acima com o WhatsApp para conectar o bot.</div>`;
+    } else if (!whatsappReady && !qrCodeDataURL) {
+        html += `<div id="instructions">QR Code ainda não gerado.<br>Por favor, aguarde no terminal até aparecer o QR Code.</div>`;
     }
+
+    html += `
+    <script>
+        // Atualiza a página a cada 15 segundos para tentar pegar QR novo
+        setTimeout(() => location.reload(), 15000);
+    </script>
+    </body>
+    </html>
+    `;
+
+    res.send(html);
 });
 
 // Enviar mensagem via GET ou POST
