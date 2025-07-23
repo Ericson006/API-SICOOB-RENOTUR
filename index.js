@@ -1,15 +1,17 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const app = express();
 
-app.use(cors()); // libera CORS, útil se o Flask fizer requisições
+app.use(cors());
 app.use(express.json());
 
 let whatsappReady = false;
 
-// Inicializa cliente WhatsApp com autenticação local
+// Inicializa cliente WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -18,33 +20,45 @@ const client = new Client({
     }
 });
 
-// QR Code no terminal para login
-client.on('qr', (qr) => {
+// Gera QR Code no terminal e salva como imagem
+client.on('qr', async (qr) => {
     console.log('📲 Escaneie o QR Code com o WhatsApp:');
     qrcode.generate(qr, { small: true });
+
+    try {
+        await QRCode.toFile('qrcode.png', qr, {
+            width: 300,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+            }
+        });
+        console.log('🖼️ QR Code salvo como qrcode.png');
+    } catch (err) {
+        console.error('❌ Erro ao salvar QR Code:', err);
+    }
 });
 
-// Cliente pronto
+// Confirma que cliente está pronto
 client.on('ready', () => {
     whatsappReady = true;
     console.log('✅ Cliente WhatsApp pronto!');
 });
 
-// Inicializa cliente
 client.initialize();
 
-// Rota teste simples
+// Rota simples
 app.get('/', (req, res) => {
     res.send('✅ Bot WhatsApp está rodando!');
 });
 
-// Endpoint para enviar mensagem via GET ou POST
+// Enviar mensagem via GET ou POST
 app.all('/enviar', async (req, res) => {
     if (!whatsappReady) {
         return res.status(503).send('❌ WhatsApp ainda não está pronto.');
     }
 
-    // Suporta GET (query) ou POST (json)
     const numero = req.method === 'POST' ? req.body.numero : req.query.numero;
     const mensagem = req.method === 'POST' ? req.body.mensagem : req.query.mensagem;
 
@@ -53,13 +67,11 @@ app.all('/enviar', async (req, res) => {
     }
 
     try {
-        // Ajusta o número para formato WhatsApp (ex: adiciona @c.us se faltar)
         let chatId = numero;
         if (!chatId.endsWith('@c.us')) {
-            chatId = chatId + '@c.us';
+            chatId += '@c.us';
         }
 
-        // Verifica se número existe no WhatsApp
         const contato = await client.getNumberId(chatId);
         if (!contato) {
             return res.status(404).send('❌ Número não encontrado no WhatsApp.');
