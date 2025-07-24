@@ -12,7 +12,7 @@ app.use(express.json());
 let whatsappReady = false;
 let qrCodeDataURL = null;
 let client;
-let autenticado = false; // 🟢 Flag para evitar mostrar QR após login
+let autenticado = false;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -44,7 +44,7 @@ async function carregarSessaoDoSupabase() {
   }
 }
 
-// 💾 Salva sessão no Supabase (se válida)
+// 💾 Salva sessão no Supabase
 async function salvarSessaoNoSupabase(sessao) {
   if (!sessao || Object.keys(sessao).length < 3) {
     console.log('⚠️ Sessão não foi salva — objeto inválido.');
@@ -77,7 +77,7 @@ async function verificarCobrancasEEnviar() {
   console.log('🔎 Buscando cobranças concluídas no Supabase...');
   const { data: cobrancas, error } = await supabase
     .from('cobrancas')
-    .select('txid, status, telefone_cliente, mensagem_confirmacao, mensagem_enviada')
+    .select('txid, status, telefone_cliente, mensagem_confirmação, mensagem_enviada')
     .eq('status', 'concluido')
     .eq('mensagem_enviada', false);
 
@@ -102,7 +102,7 @@ async function verificarCobrancasEEnviar() {
         continue;
       }
 
-      await client.sendMessage(contato._serialized, cobranca.mensagem_confirmacao);
+      await client.sendMessage(contato._serialized, cobranca['mensagem_confirmação']);
       console.log(`✅ Mensagem enviada para ${cobranca.telefone_cliente} (txid: ${cobranca.txid})`);
 
       const { error: updateError } = await supabase
