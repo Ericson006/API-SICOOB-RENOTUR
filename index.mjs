@@ -1,4 +1,13 @@
-import baileys from '@whiskeysockets/baileys';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { createRequire } from 'module';
+import fs from 'fs/promises';
+import dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
+
+// Solução para importar o Baileys corretamente
+const require = createRequire(import.meta.url);
+const baileys = require('@whiskeysockets/baileys');
 const { 
   makeWASocket, 
   useSingleFileAuthState, 
