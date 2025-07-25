@@ -1,9 +1,10 @@
-import express from 'express'; // Adicione esta linha no topo com os outros imports
-import { createClient } from '@supabase/supabase-js';
-import { makeWASocket, useSingleFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import baileys from '@whiskeysockets/baileys';
+const { 
+  makeWASocket, 
+  useSingleFileAuthState, 
+  fetchLatestBaileysVersion, 
+  DisconnectReason 
+} = baileys;
 
 // Configuração básica
 const __filename = fileURLToPath(import.meta.url);
