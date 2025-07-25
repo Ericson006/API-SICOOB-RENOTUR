@@ -1,11 +1,16 @@
+// Adicione no TOPO do arquivo:
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import path from 'path';
 import { createRequire } from 'module';
 import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// Solução para importar o Baileys corretamente
+// Configuração de paths CORRETA
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Solução para o Baileys (CommonJS)
 const require = createRequire(import.meta.url);
 const baileys = require('@whiskeysockets/baileys');
 const { 
