@@ -3,50 +3,21 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.mjs",
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
-  },
   "scripts": {
-    "start": "NODE_ENV=production node --no-warnings index.mjs",
-    "dev": "NODE_ENV=development nodemon --watch . --ext mjs,js,json --exec node index.mjs",
-    "deploy": "npm ci --omit=dev && npm run start",
-    "lint": "eslint . --ext .mjs",
-    "format": "prettier --write .",
-    "healthcheck": "node healthcheck.mjs",
-    "keepalive": "node keepalive.mjs",
-    "test": "NODE_ENV=test vitest run"
+    "start": "NODE_OPTIONS='--experimental-vm-modules' node index.mjs",
+    "dev": "nodemon --experimental-vm-modules index.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
     "@whiskeysockets/baileys": "^6.7.4",
     "dotenv": "^16.4.5",
-    "express": "^4.18.2",
     "node-fetch": "^3.3.2",
-    "pino": "^8.19.0",
-    "pino-pretty": "^10.2.3"
+    "express": "^4.18.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0",
-    "eslint": "^8.57.0",
-    "eslint-config-prettier": "^9.1.0",
-    "prettier": "^3.2.5",
-    "vitest": "^1.4.0"
+    "nodemon": "^3.1.0"
   },
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "supabase",
-    "automation"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/seu-usuario/whatsapp-supabase-bot.git"
-  },
-  "license": "MIT",
-  "private": true,
-  "volta": {
-    "node": "20.11.1",
-    "npm": "10.4.0"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
