@@ -74,6 +74,27 @@ async function verificarCobrancasEEnviar() {
     return;
   }
 
+  async function testarAcessoTabelaCobrancas() {
+  try {
+    const { data, error } = await supabase.from('cobrancas').select('*').limit(2);
+    if (error) {
+      console.error("❌ Erro ao acessar a tabela 'cobrancas':", error.message || error);
+    } else {
+      console.log(`✅ Acesso à tabela 'cobrancas' confirmado. Registros encontrados: ${data.length}`);
+      if (data.length > 0) {
+        console.log("🧾 Amostra:", data);
+      } else {
+        console.log("⚠️ Tabela 'cobrancas' está vazia.");
+      }
+    }
+  } catch (err) {
+    console.error("❌ Exceção ao testar tabela 'cobrancas':", err);
+  }
+}
+
+testarAcessoTabelaCobrancas();
+
+
   console.log('🔎 Buscando cobranças concluídas no Supabase...');
   const { data: cobrancas, error } = await supabase
     .from('cobrancas')
