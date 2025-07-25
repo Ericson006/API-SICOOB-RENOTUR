@@ -4,12 +4,14 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
-import {
+import baileys from '@whiskeysockets/baileys';
+
+const {
   makeWASocket,
   useSingleFileAuthState,
   fetchLatestBaileysVersion,
   DisconnectReason
-} from '@whiskeysockets/baileys';
+} = baileys;
 
 dotenv.config();
 
