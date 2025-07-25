@@ -2,11 +2,11 @@
   "name": "whatsapp-bot-esm",
   "version": "1.0.0",
   "description": "Bot WhatsApp com Baileys e Supabase usando ESModules",
-  "main": "index.js",
+  "main": "index.cjs",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.cjs",
+    "dev": "nodemon index.cjs"
   },
   "author": "Ianny Miranda",
   "license": "other",
