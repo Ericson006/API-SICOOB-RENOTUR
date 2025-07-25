@@ -4,7 +4,7 @@
   "type": "module",
   "main": "index.mjs",
   "scripts": {
-    "start": "NODE_OPTIONS='--experimental-vm-modules' node index.mjs",
+    "start": "node index.mjs",
     "dev": "nodemon index.mjs",
     "deploy": "npm ci --omit=dev && npm run start"
   },
@@ -19,6 +19,6 @@
     "nodemon": "^3.1.0"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.0.0"
   }
 }
