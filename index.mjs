@@ -1,3 +1,4 @@
+import express from 'express'; // Adicione esta linha no topo com os outros imports
 import { createClient } from '@supabase/supabase-js';
 import { makeWASocket, useSingleFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
 import fs from 'fs/promises';
@@ -10,11 +11,30 @@ const __dirname = path.dirname(__filename);
 const authFolder = path.join(__dirname, 'auth');
 const authFile = path.join(authFolder, 'creds.json');
 
+// Inicializa o Express
+const app = express();
+const PORT = process.env.PORT || 3000;
+
 // Controles de conexão
 let supabase = null;
 let sock = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
+
+// Health Check Endpoint - ADICIONE ESTA PARTE
+app.get('/health', (req, res) => {
+  const services = {
+    whatsapp: !!sock,
+    supabase: !!supabase,
+    last_reconnect: reconnectAttempts
+  };
+  
+  const healthy = services.whatsapp && services.supabase;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'healthy' : 'degraded',
+    services
+  });
+});
 
 // Inicialização otimizada
 async function init() {
@@ -24,6 +44,12 @@ async function init() {
     await connectWhatsApp();
     setupPaymentListener();
     startHealthChecks();
+    
+    // Inicia o servidor Express
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Health check available at http://localhost:${PORT}/health`);
+    });
   } catch (err) {
     console.error('Initialization error:', err.message);
     setTimeout(init, 5000);
