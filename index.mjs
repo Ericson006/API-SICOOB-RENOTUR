@@ -3,10 +3,17 @@ import { dirname } from 'path';
 import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'module';
 
-// SOLUÇÃO DEFINITIVA - FORMA COMPROVADA
-import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
-import { useSingleFileAuthState } from '@whiskeysockets/baileys/lib/Utils/auth-state.js';
+// SOLUÇÃO DEFINITIVA PARA O BAILEYS
+const require = createRequire(import.meta.url);
+const baileys = require('@whiskeysockets/baileys');
+const {
+  makeWASocket,
+  useSingleFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = baileys;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -66,8 +73,10 @@ async function startBot() {
 
   // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
+  const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
