@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import QRCode from 'qrcode';
 
 let ultimoQR = null;
 
@@ -85,6 +86,11 @@ async function startBot() {
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update;
 
+        if (update.qr) {
+    ultimoQR = update.qr;
+    console.log('🆕 Novo QR Code gerado');
+      }
+
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
@@ -149,6 +155,25 @@ function escutarSupabase(sock) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/health', (req, res) => res.status(200).send('OK'));
+app.get('/qr', async (req, res) => {
+  if (!ultimoQR) {
+    return res.status(404).send('❌ QR Code ainda não disponível.');
+  }
+
+  try {
+    const qrImage = await QRCode.toDataURL(ultimoQR);
+    res.send(`
+      <html>
+        <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+          <h1>📲 Escaneie o QR Code</h1>
+          <img src="${qrImage}" />
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    res.status(500).send('Erro ao gerar imagem do QR Code.');
+  }
+});
 
 // Inicialização segura com monitoramento de memória
 app.listen(PORT, async () => {
