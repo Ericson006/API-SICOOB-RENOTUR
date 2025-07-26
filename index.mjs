@@ -5,10 +5,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { Boom } from '@hapi/boom';
-import makeWASocket, { 
-  DisconnectReason,
-  useSingleFileAuthState 
-} from '@whiskeysockets/baileys';
+import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -66,7 +63,7 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // SOLUÇÃO ALTERNATIVA - Implementação manual do auth state
+  // Implementação manual do auth state
   const authFile = `${authFolder}/creds.json`;
   let creds = {};
   
@@ -101,7 +98,11 @@ async function startBot() {
     const { connection, lastDisconnect } = update;
     
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+      // Verificação segura sem type casting
+      const error = lastDisconnect?.error;
+      const statusCode = error instanceof Boom ? error.output.statusCode : error?.statusCode;
+      
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       console.log(`🔌 Conexão encerrada. ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
       if (shouldReconnect) setTimeout(startBot, 5000);
     } else if (connection === 'open') {
