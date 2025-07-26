@@ -1,8 +1,8 @@
-// Importações essenciais
+// Importações corretas
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { createRequire } from 'module';
-import fs from 'fs/promises';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,20 +11,26 @@ const currentFileUrl = import.meta.url;
 const currentFilePath = fileURLToPath(currentFileUrl);
 const currentDirPath = dirname(currentFilePath);
 
-// Solução para importar o Baileys (CommonJS)
+// Solução definitiva para importar o Baileys
 const require = createRequire(import.meta.url);
-const baileys = require('@whiskeysockets/baileys');
 const { 
-  makeWASocket, 
-  useSingleFileAuthState, 
-  fetchLatestBaileysVersion, 
-  DisconnectReason 
-} = baileys;
+  default: { 
+    makeWASocket, 
+    useSingleFileAuthState, 
+    fetchLatestBaileysVersion, 
+    DisconnectReason 
+  } 
+} = require('@whiskeysockets/baileys');
 
 // Configuração do ambiente
 dotenv.config();
 
-// Inicialização do Supabase
+// Verificação das variáveis de ambiente
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+  console.error('❌ Variáveis SUPABASE_URL e SUPABASE_KEY são obrigatórias');
+  process.exit(1);
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL, 
   process.env.SUPABASE_KEY
@@ -37,7 +43,9 @@ const bucket = 'auth-session';
 async function baixarAuthDoSupabase() {
   console.log('🔄 Baixando arquivos de autenticação...');
   try {
-    if (!fs.existsSync(authFolder)) await fs.mkdir(authFolder, { recursive: true });
+    if (!fs.existsSync(authFolder)) {
+      await fs.promises.mkdir(authFolder, { recursive: true });
+    }
 
     const { data: files, error } = await supabase.storage
       .from(bucket)
@@ -51,23 +59,15 @@ async function baixarAuthDoSupabase() {
         .createSignedUrl(file.name, 3600);
       
       const res = await fetch(signedUrl.signedUrl);
-      await fs.writeFile(`${authFolder}/${file.name}`, Buffer.from(await res.arrayBuffer()));
+      await fs.promises.writeFile(
+        `${authFolder}/${file.name}`, 
+        Buffer.from(await res.arrayBuffer())
+      );
       console.log(`⬇️ Baixado: ${file.name}`);
     }
     return true;
   } catch (error) {
     console.error('❌ Erro ao baixar auth:', error.message);
-    return false;
-  }
-}
-
-async function testarConexaoSupabase() {
-  try {
-    const { data, error } = await supabase.from('pagamentos').select('*').limit(1);
-    if (error) throw error;
-    return true;
-  } catch (error) {
-    console.error('❌ Erro no Supabase:', error.message);
     return false;
   }
 }
@@ -99,53 +99,10 @@ async function startBot() {
       escutarSupabase(sock);
     }
   });
-
-  const conexaoOk = await testarConexaoSupabase();
-  if (!conexaoOk) console.error('🚨 Falha na conexão com Supabase');
 }
 
-function escutarSupabase(sock) {
-  console.log('🔔 Escutando tabela pagamentos...');
-  
-  supabase
-    .channel('pagamentos-channel')
-    .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'pagamentos',
-      filter: 'status=eq.concluido'
-    }, async (payload) => {
-      const pagamento = payload.new;
-      if (pagamento.mensagem_enviada) return;
-
-      const numero = `${pagamento.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
-      const mensagem = pagamento.mensagem_confirmação || '✅ Pagamento confirmado! Obrigado.';
-
-      try {
-        await sock.sendMessage(numero, { text: mensagem });
-        console.log(`📤 Mensagem enviada para ${numero}`);
-        
-        await supabase
-          .from('pagamentos')
-          .update({ mensagem_enviada: true })
-          .eq('txid', pagamento.txid);
-      } catch (error) {
-        console.error('⚠️ Erro ao enviar mensagem:', error.message);
-      }
-    })
-    .subscribe();
-}
-
-// Inicialização do bot com tratamento de erros
+// Inicialização do bot
 startBot().catch(error => {
   console.error('💥 Erro fatal:', error);
   process.exit(1);
-});
-
-// Health check endpoint (opcional para Render)
-import express from 'express';
-const app = express();
-app.get('/health', (req, res) => res.status(200).send('OK'));
-app.listen(process.env.PORT || 3000, () => {
-  console.log(`🩺 Health check ativo na porta ${process.env.PORT || 3000}`);
 });
