@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.mjs",
-    "build": "echo 'Building...' && echo 'Build complete!'",
-    "deploy": "npm install && npm run build && npm start",
+    "build": "echo 'Building WhatsApp Bot...'",
     "dev": "nodemon index.mjs"
   },
   "dependencies": {
