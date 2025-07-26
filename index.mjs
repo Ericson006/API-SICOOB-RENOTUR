@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+
 let ultimoQR = null;
 
 // Configuração de paths
