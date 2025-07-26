@@ -155,10 +155,15 @@ function escutarSupabase(sock) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/health', (req, res) => res.status(200).send('OK'));
-app.get('/qr', async (req, res) => {
-  if (!ultimoQR) {
-    return res.status(404).send('❌ QR Code ainda não disponível.');
-  }
+// Rota para retornar o QR em JSON
+app.get('/qr', (req, res) => {
+  res.json({ qr: latestQR });
+});
+
+// Rota raiz serve o HTML com o QR
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'qr.html'));
+});
 
   try {
     const qrImage = await QRCode.toDataURL(ultimoQR);
