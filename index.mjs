@@ -4,8 +4,6 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import pino from 'pino'; // Logger compatível com o Baileys
-import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -28,15 +26,6 @@ const supabase = createClient(
 // Configurações do bot
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
-
-// Configuração do logger
-const logger = pino({
-  level: 'warn',
-  transport: {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
 
 async function baixarAuthDoSupabase() {
   console.log('🔄 Baixando arquivos de autenticação...');
@@ -72,32 +61,44 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // Implementação manual do auth state
+  // SOLUÇÃO 100% MANUAL - SEM DEPENDÊNCIA DE FUNÇÕES EXTERNAS
   const authFile = `${authFolder}/creds.json`;
   let creds = {};
   
   try {
     const data = await fs.readFile(authFile, 'utf-8');
     creds = JSON.parse(data);
-    console.log('🔑 Credenciais carregadas');
+    console.log('🔑 Credenciais carregadas com sucesso');
   } catch (error) {
     console.warn('⚠️ Criando novo arquivo de autenticação');
   }
 
-  // Função para salvar o estado
+  // Função para salvar o estado - COMPLETAMENTE MANUAL
   const saveState = () => {
     fs.writeFile(authFile, JSON.stringify(creds, null, 2))
+      .then(() => console.log('💾 Credenciais salvas'))
       .catch(err => console.error('❌ Erro ao salvar credenciais:', err));
   };
 
-  // Configuração do socket com logger compatível
-  const sock = makeWASocket({
+  // Importação DINÂMICA do Baileys para evitar conflitos de inicialização
+  const { default: baileys } = await import('@whiskeysockets/baileys');
+  const { DisconnectReason } = baileys;
+
+  // Configuração simplificada do socket
+  const sock = baileys.makeWASocket({
     auth: {
       creds,
       keys: {}
     },
     printQRInTerminal: true,
-    logger: logger // Logger compatível com o Baileys
+    // Logger mínimo para evitar problemas
+    logger: {
+      level: 'warn',
+      info: (...args) => console.log('[INFO]', ...args),
+      warn: (...args) => console.warn('[WARN]', ...args),
+      error: (...args) => console.error('[ERROR]', ...args),
+      debug: () => {} // Desabilitado para reduzir logs
+    }
   });
 
   sock.ev.on('creds.update', (updatedCreds) => {
@@ -109,7 +110,7 @@ async function startBot() {
     const { connection, lastDisconnect } = update;
     
     if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       
       console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
