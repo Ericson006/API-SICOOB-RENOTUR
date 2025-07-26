@@ -4,9 +4,8 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// Importação CORRETA do Baileys v6.x
-import pkg from '@whiskeysockets/baileys';
-const { makeWASocket, useSingleFileAuthState, DisconnectReason } = pkg;
+// Importação CORRETA do Baileys (versão 6.8.1+)
+import { makeWASocket, useSingleFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -30,6 +29,7 @@ const supabase = createClient(
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
 
+// Função para baixar credenciais do Supabase
 async function baixarAuthDoSupabase() {
   console.log('🔄 Baixando arquivos de autenticação...');
   try {
@@ -60,21 +60,22 @@ async function baixarAuthDoSupabase() {
   }
 }
 
+// Função principal do bot
 async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // USO CORRETO da função
+  // Configuração do estado de autenticação
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
-  const { version } = await fetchLatestBaileysVersion();
   
+  // Criação da conexão WhatsApp
   const sock = makeWASocket({
-    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
   });
 
+  // Eventos de conexão
   sock.ev.on('creds.update', saveState);
 
   sock.ev.on('connection.update', (update) => {
@@ -84,13 +85,16 @@ async function startBot() {
       if (shouldReconnect) setTimeout(startBot, 5000);
     } else if (update.connection === 'open') {
       console.log('✅ Conectado ao WhatsApp!');
+      escutarSupabase(sock); // Inicia a escuta do Supabase após conexão
     }
   });
 }
 
 // Função para escutar mudanças no Supabase
 function escutarSupabase(sock) {
-  supabase
+  console.log('🔔 Iniciando escuta do Supabase...');
+  
+  const channel = supabase
     .channel('pagamentos-channel')
     .on('postgres_changes', {
       event: 'UPDATE',
@@ -117,9 +121,11 @@ function escutarSupabase(sock) {
       }
     })
     .subscribe();
+
+  console.log('👂 Escuta do Supabase ativada');
 }
 
-// Inicialização segura
+// Inicialização segura com tratamento de erros
 startBot().catch(error => {
   console.error('💥 Erro fatal:', error);
   process.exit(1);
