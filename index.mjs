@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // SOLUÇÃO DEFINITIVA - FORMA COMPROVADA
 import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
-import authState from '@whiskeysockets/baileys/lib/Utils/auth-state.js';
+import { useSingleFileAuthState } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -65,7 +65,7 @@ async function startBot() {
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
   // USO CORRETO - FORMA COMPROVADA
-  const { state, saveState } = authState.useSingleFileAuthState(`${authFolder}/creds.json`);
+  const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
   
   const sock = makeWASocket({
     auth: state,
