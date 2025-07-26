@@ -154,19 +154,19 @@ function escutarSupabase(sock) {
 // Health check endpoint
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Health check
 app.get('/health', (req, res) => res.status(200).send('OK'));
-// Rota para retornar o QR em JSON
+
+// Rota para retornar o QR em JSON (se estiver guardando em variável)
 app.get('/qr', (req, res) => {
   res.json({ qr: latestQR });
 });
 
-// Rota raiz serve o HTML com o QR
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'qr.html'));
-});
-
+// Rota raiz serve o QR gerado como imagem (modo simples direto no navegador)
+app.get('/', async (req, res) => {
   try {
-    const qrImage = await QRCode.toDataURL(ultimoQR);
+    const qrImage = await QRCode.toDataURL(latestQR); // latestQR precisa estar definido globalmente
     res.send(`
       <html>
         <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
