@@ -10,13 +10,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
-    "@whiskeysockets/baileys": "6.7.1", 
+    "@whiskeysockets/baileys": "6.7.1", // Versão estável comprovada
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2",
-    "pino": "^8.17.1" 
+    "pino": "^8.17.1" // Adicionado para logs melhores
   },
   "engines": {
-    "node": "18.x || 20.x" 
+    "node": "18.x || 20.x" // Flexibilidade para o Render
   }
 }
