@@ -4,15 +4,11 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import pkg from '@whiskeysockets/baileys'; // Importação correta
-
-// Desestruturação das funções necessárias
-const { 
-  makeWASocket, 
-  useSingleFileAuthState, 
+import { Boom } from '@hapi/boom';
+import makeWASocket, { 
   DisconnectReason,
-  fetchLatestBaileysVersion
-} = pkg;
+  useSingleFileAuthState 
+} from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -70,25 +66,45 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // USO CORRETO - FORMA VERIFICADA
-  const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
-  const { version } = await fetchLatestBaileysVersion();
+  // SOLUÇÃO ALTERNATIVA - Implementação manual do auth state
+  const authFile = `${authFolder}/creds.json`;
+  let creds = {};
   
+  try {
+    const data = await fs.readFile(authFile, 'utf-8');
+    creds = JSON.parse(data);
+  } catch (error) {
+    console.warn('⚠️ Criando novo arquivo de autenticação');
+  }
+
+  // Função para salvar o estado
+  const saveState = () => {
+    fs.writeFile(authFile, JSON.stringify(creds, null, 2))
+      .catch(err => console.error('❌ Erro ao salvar credenciais:', err));
+  };
+
   const sock = makeWASocket({
-    version,
-    auth: state,
+    auth: {
+      creds,
+      keys: {}
+    },
     printQRInTerminal: true,
     logger: { level: 'warn' }
   });
 
-  sock.ev.on('creds.update', saveState);
+  sock.ev.on('creds.update', (updatedCreds) => {
+    creds = updatedCreds;
+    saveState();
+  });
 
   sock.ev.on('connection.update', (update) => {
-    if (update.connection === 'close') {
-      const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+    const { connection, lastDisconnect } = update;
+    
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(`🔌 Conexão encerrada. ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
       if (shouldReconnect) setTimeout(startBot, 5000);
-    } else if (update.connection === 'open') {
+    } else if (connection === 'open') {
       console.log('✅ Conectado ao WhatsApp!');
       escutarSupabase(sock);
     }
