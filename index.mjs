@@ -6,9 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
-import pkg from 'pg';
-
-const { Client: PgClient } = pkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -96,6 +93,10 @@ async function startBot() {
       if (update.qr) {
         ultimoQR = update.qr;
         console.log('🆕 Novo QR Code gerado');
+        // Mostrar QR code no terminal (alternativa ao printQRInTerminal)
+        QRCode.toString(ultimoQR, { type: 'terminal' }, (err, url) => {
+          if (!err) console.log(url);
+        });
       }
 
       if (connection === 'close') {
@@ -112,8 +113,7 @@ async function startBot() {
         }
       } else if (connection === 'open') {
         console.log('✅ Conectado ao WhatsApp!');
-        escutarSupabase();
-        startPgListener();
+        escutarSupabase(); // Usa apenas o Supabase Realtime agora
       }
     });
 
@@ -125,7 +125,7 @@ async function startBot() {
 }
 
 function escutarSupabase() {
-  console.log('🔔 Iniciando escuta do Supabase...');
+  console.log('🔔 Iniciando escuta do Supabase Realtime...');
   
   const channel = supabase
     .channel('pagamentos-channel')
@@ -142,6 +142,11 @@ function escutarSupabase() {
       const mensagem = pagamento.mensagem_confirmação || '✅ Pagamento confirmado! Obrigado.';
 
       try {
+        if (!sock) {
+          console.warn('⚠️ WhatsApp desconectado - mensagem não enviada');
+          return;
+        }
+
         await sock.sendMessage(numero, { text: mensagem });
         console.log(`📤 Mensagem enviada para ${numero}`);
         
@@ -155,55 +160,8 @@ function escutarSupabase() {
       }
     })
     .subscribe();
-}
 
-async function startPgListener() {
-  if (!process.env.SUPABASE_DB_URL) {
-    console.warn('⚠️ SUPABASE_DB_URL não configurado - listener PostgreSQL desativado');
-    return;
-  }
-
-  try {
-    const pgClient = new PgClient({
-      connectionString: process.env.SUPABASE_DB_URL,
-    });
-
-    await pgClient.connect();
-    await pgClient.query('LISTEN pagamento_confirmado');
-
-    console.log('🟢 Aguardando confirmações de pagamento via PostgreSQL LISTEN...');
-
-    pgClient.on('notification', async (msg) => {
-      if (msg.channel === 'pagamento_confirmado') {
-        const payload = JSON.parse(msg.payload);
-        console.log('✅ Pagamento confirmado via PostgreSQL:', payload);
-        
-        if (sock) {
-          const numero = `${payload.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
-          const mensagem = payload.mensagem_confirmação || '✅ Pagamento confirmado via PostgreSQL! Obrigado.';
-          
-          try {
-            await sock.sendMessage(numero, { text: mensagem });
-            console.log(`📤 Mensagem enviada para ${numero}`);
-          } catch (error) {
-            console.error('⚠️ Erro ao enviar mensagem via PostgreSQL listener:', error.message);
-          }
-        }
-      }
-    });
-
-    pgClient.on('error', (err) => {
-      console.error('⚠️ Erro na conexão PostgreSQL:', err.message);
-      // Tentar reconectar após um tempo
-      setTimeout(startPgListener, 5000);
-    });
-
-    return pgClient;
-  } catch (error) {
-    console.error('🚨 Erro ao iniciar listener PostgreSQL:', error);
-    // Tentar novamente após um tempo
-    setTimeout(startPgListener, 5000);
-  }
+  return channel;
 }
 
 // Rotas do Express
