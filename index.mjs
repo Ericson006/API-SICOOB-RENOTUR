@@ -4,14 +4,9 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// SOLUÇÃO DEFINITIVA PARA IMPORTAÇÃO DO BAILEYS
-import baileysPkg from '@whiskeysockets/baileys';
-const { 
-  makeWASocket, 
-  useSingleFileAuthState, 
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} = baileysPkg;
+// SOLUÇÃO DEFINITIVA - FORMA COMPROVADA
+import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
+import authState from '@whiskeysockets/baileys/lib/Utils/auth-state.js';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -69,14 +64,10 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // USO CORRETO - FORMA VERIFICADA
-  const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
-  
-  // Obter a versão mais recente
-  const { version } = await fetchLatestBaileysVersion();
+  // USO CORRETO - FORMA COMPROVADA
+  const { state, saveState } = authState.useSingleFileAuthState(`${authFolder}/creds.json`);
   
   const sock = makeWASocket({
-    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
@@ -134,7 +125,7 @@ startBot().catch(error => {
   process.exit(1);
 });
 
-// Adicione um endpoint de health check para evitar timeout
+// Health check endpoint
 import express from 'express';
 const app = express();
 const PORT = process.env.PORT || 3000;
