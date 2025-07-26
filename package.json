@@ -8,6 +8,7 @@
     "dev": "nodemon index.mjs"
   },
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@supabase/supabase-js": "^2.42.3",
     "@whiskeysockets/baileys": "^6.8.1",
     "dotenv": "^16.4.5",
