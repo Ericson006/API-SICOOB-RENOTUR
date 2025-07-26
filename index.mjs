@@ -4,9 +4,14 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// IMPORT CORRETO E TESTADO - FORMA 100% FUNCIONAL
-import { makeWASocket } from '@whiskeysockets/baileys';
-import { useSingleFileAuthState } from '@whiskeysockets/baileys';
+// SOLUÇÃO DEFINITIVA PARA IMPORTAÇÃO DO BAILEYS
+import baileysPkg from '@whiskeysockets/baileys';
+const { 
+  makeWASocket, 
+  useSingleFileAuthState, 
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = baileysPkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -67,7 +72,11 @@ async function startBot() {
   // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
   
+  // Obter a versão mais recente
+  const { version } = await fetchLatestBaileysVersion();
+  
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
@@ -124,3 +133,10 @@ startBot().catch(error => {
   console.error('💥 Erro fatal:', error);
   process.exit(1);
 });
+
+// Adicione um endpoint de health check para evitar timeout
+import express from 'express';
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/health', (req, res) => res.status(200).send('OK'));
+app.listen(PORT, () => console.log(`🩺 Health check ativo na porta ${PORT}`));
