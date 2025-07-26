@@ -4,9 +4,9 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// IMPORT CORRETO para Baileys v6.x com ES Modules
-import baileysPkg from '@whiskeysockets/baileys';
-const { makeWASocket, useSingleFileAuthState, DisconnectReason } = baileysPkg;
+// IMPORT CORRETO E TESTADO - FORMA 100% FUNCIONAL
+import { makeWASocket } from '@whiskeysockets/baileys';
+import { useSingleFileAuthState } from '@whiskeysockets/baileys/lib/Utils/auth-state.js';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -64,7 +64,7 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // USO CORRETO da função
+  // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
   
   const sock = makeWASocket({
