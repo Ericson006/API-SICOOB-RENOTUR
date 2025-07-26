@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { Boom } from '@hapi/boom';
+import pino from 'pino'; // Logger compatível com o Baileys
 import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
 
 // Configuração de paths
@@ -28,6 +28,15 @@ const supabase = createClient(
 // Configurações do bot
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
+
+// Configuração do logger
+const logger = pino({
+  level: 'warn',
+  transport: {
+    target: 'pino-pretty',
+    options: { colorize: true }
+  }
+});
 
 async function baixarAuthDoSupabase() {
   console.log('🔄 Baixando arquivos de autenticação...');
@@ -70,6 +79,7 @@ async function startBot() {
   try {
     const data = await fs.readFile(authFile, 'utf-8');
     creds = JSON.parse(data);
+    console.log('🔑 Credenciais carregadas');
   } catch (error) {
     console.warn('⚠️ Criando novo arquivo de autenticação');
   }
@@ -80,13 +90,14 @@ async function startBot() {
       .catch(err => console.error('❌ Erro ao salvar credenciais:', err));
   };
 
+  // Configuração do socket com logger compatível
   const sock = makeWASocket({
     auth: {
       creds,
       keys: {}
     },
     printQRInTerminal: true,
-    logger: { level: 'warn' }
+    logger: logger // Logger compatível com o Baileys
   });
 
   sock.ev.on('creds.update', (updatedCreds) => {
@@ -98,12 +109,10 @@ async function startBot() {
     const { connection, lastDisconnect } = update;
     
     if (connection === 'close') {
-      // Verificação segura sem type casting
-      const error = lastDisconnect?.error;
-      const statusCode = error instanceof Boom ? error.output.statusCode : error?.statusCode;
-      
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      console.log(`🔌 Conexão encerrada. ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
+      
+      console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
       if (shouldReconnect) setTimeout(startBot, 5000);
     } else if (connection === 'open') {
       console.log('✅ Conectado ao WhatsApp!');
