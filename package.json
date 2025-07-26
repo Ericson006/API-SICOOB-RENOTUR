@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
-    "@whiskeysockets/baileys": "^6.7.4",
+    "@whiskeysockets/baileys": "^6.8.1",
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2"
   },
