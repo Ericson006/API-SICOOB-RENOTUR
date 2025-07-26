@@ -61,7 +61,6 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // SOLUÇÃO COMPLETA PARA O HANDSHAKE
   const authFile = `${authFolder}/creds.json`;
   let state = { 
     creds: {}, 
@@ -74,6 +73,7 @@ async function startBot() {
     console.log('🔑 Credenciais carregadas com sucesso');
   } catch (error) {
     console.warn('⚠️ Criando novo arquivo de autenticação');
+    state.creds = initAuthCreds();
   }
 
   // Função para salvar o estado
@@ -83,40 +83,35 @@ async function startBot() {
       .catch(err => console.error('❌ Erro ao salvar credenciais:', err));
   };
 
-  // Importação DINÂMICA do Baileys para evitar conflitos
+  // Importação DINÂMICA do Baileys
   const { default: baileys } = await import('@whiskeysockets/baileys');
-  const { DisconnectReason } = baileys;
+  const { DisconnectReason, initAuthCreds } = baileys;
 
-  // Configuração correta do socket com todas as chaves necessárias
+  // Configuração do socket com tratamento moderno
   const sock = baileys.makeWASocket({
     auth: {
-      creds: state.creds,
-      keys: baileys.initInMemoryKeyStore(state.keys) // SOLUÇÃO CHAVE
+      creds: state.creds || initAuthCreds(),
+      keys: state.keys || {}
     },
     printQRInTerminal: true,
-    // Logger mínimo para evitar problemas
-    logger: {
-      level: 'warn',
-      info: (...args) => console.log('[INFO]', ...args),
-      warn: (...args) => console.warn('[WARN]', ...args),
-      error: (...args) => console.error('[ERROR]', ...args),
-      debug: () => {} // Desabilitado para reduzir logs
+    logger: baileys.pino({ level: 'silent' }),
+    getMessage: async (key) => {
+      return {
+        conversation: 'Mensagem recuperada'
+      }
     }
   });
 
-  sock.ev.on('creds.update', (updatedCreds) => {
-    state.creds = updatedCreds;
-    saveState();
-  });
-
-  // Atualiza as chaves quando necessário
-  sock.ev.on('keys.update', (keyUpdate) => {
-    if (keyUpdate.keys) {
-      state.keys = keyUpdate.keys;
+  // Atualizações de estado
+  sock.ev.on('creds.update', saveState);
+  sock.ev.on('keys.update', (keys) => {
+    if (keys) {
+      state.keys = keys;
       saveState();
     }
   });
 
+  // Gerenciamento de conexão
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
     
@@ -131,6 +126,8 @@ async function startBot() {
       escutarSupabase(sock);
     }
   });
+
+  return sock;
 }
 
 function escutarSupabase(sock) {
@@ -182,3 +179,21 @@ app.listen(PORT, async () => {
     process.exit(1);
   }
 });
+
+// Função auxiliar para credenciais
+function initAuthCreds() {
+  return {
+    noiseKey: Buffer.alloc(32).fill(0),
+    signedIdentityKey: Buffer.alloc(32).fill(0),
+    signedPreKey: {
+      keyPair: {
+        public: Buffer.alloc(32).fill(0),
+        private: Buffer.alloc(32).fill(0)
+      },
+      signature: Buffer.alloc(64).fill(0),
+      keyId: 1
+    },
+    registrationId: 0,
+    advSecretKey: Buffer.alloc(32).toString('base64')
+  };
+}
