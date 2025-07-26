@@ -3,17 +3,10 @@ import { dirname } from 'path';
 import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import { createRequire } from 'module';
+import express from 'express';
 
-// SOLUÇÃO DEFINITIVA PARA O BAILEYS
-const require = createRequire(import.meta.url);
-const baileys = require('@whiskeysockets/baileys');
-const {
-  makeWASocket,
-  useSingleFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} = baileys;
+// SOLUÇÃO DEFINITIVA - Usando uma versão específica e estável do Baileys
+import { makeWASocket, useSingleFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -73,10 +66,8 @@ async function startBot() {
 
   // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
-  const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
-    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
@@ -128,15 +119,20 @@ function escutarSupabase(sock) {
     .subscribe();
 }
 
-// Inicialização segura
-startBot().catch(error => {
-  console.error('💥 Erro fatal:', error);
-  process.exit(1);
-});
-
 // Health check endpoint
-import express from 'express';
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/health', (req, res) => res.status(200).send('OK'));
-app.listen(PORT, () => console.log(`🩺 Health check ativo na porta ${PORT}`));
+
+// Inicialização segura
+app.listen(PORT, async () => {
+  console.log(`🩺 Health check ativo na porta ${PORT}`);
+  
+  try {
+    await startBot();
+    console.log('🤖 Bot iniciado com sucesso!');
+  } catch (error) {
+    console.error('💥 Erro fatal ao iniciar bot:', error);
+    process.exit(1);
+  }
+});
