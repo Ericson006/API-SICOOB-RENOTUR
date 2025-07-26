@@ -69,34 +69,35 @@ async function startBot() {
     const authLoaded = await baixarAuthDoSupabase();
     if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-    // Usa o sistema de autenticação multi-arquivo do Baileys
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-
-    // Importação DINÂMICA do Baileys (somente o necessário)
     const { default: baileys } = await import('@whiskeysockets/baileys');
 
-    // Salva credenciais automaticamente
+    const sock = baileys.makeWASocket({
+      auth: state,
+      printQRInTerminal: true,
+      getMessage: async () => ({})
+    });
+
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update;
-      
+
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        
+
         console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
-        
-        // Previne múltiplas tentativas simultâneas de reconexão
+
         if (shouldReconnect && !reconectando) {
           reconectando = true;
           setTimeout(() => {
             startBot().then(() => reconectando = false);
-          }, 10000); // Aumenta o tempo entre reconexões
+          }, 10000);
         }
       } else if (connection === 'open') {
         console.log('✅ Conectado ao WhatsApp!');
-        escutarSupabase(sock);
+        escutarSupabase(sock); // AQUI estava o erro, se sock não estivesse definido antes
       }
     });
 
