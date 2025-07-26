@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // IMPORT CORRETO E TESTADO - FORMA 100% FUNCIONAL
 import { makeWASocket } from '@whiskeysockets/baileys';
-import { useSingleFileAuthState } from '@whiskeysockets/baileys/lib/Utils/auth-state.js';
+import { useSingleFileAuthState } from '@whiskeysockets/baileys';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
