@@ -230,3 +230,50 @@ client.on('notification', async (msg) => {
     // await enviarMensagemWhatsApp(payload);
   }
 });
+
+
+const app = express();
+app.use(express.json()); // Para receber JSON no body
+
+// Endpoint para receber webhook do Supabase
+app.post('/webhook', async (req, res) => {
+  const payload = req.body;
+
+  console.log('Recebi webhook:', JSON.stringify(payload, null, 2));
+
+  const oldRow = payload.old; // Dados antes da alteração
+  const newRow = payload.new; // Dados depois da alteração
+
+  // Verifica se status mudou de PENDENTE para CONCLUIDO
+  if (oldRow?.status === 'PENDENTE' && newRow?.status === 'CONCLUIDO') {
+    const telefone = newRow.telefone_cliente;
+    const mensagem = 'Seu pagamento foi confirmado. Muito obrigado por escolher a Renotur!';
+
+    try {
+      await enviarMensagemWhatsApp(telefone, mensagem);
+      console.log('Mensagem enviada para', telefone);
+
+      // Se quiser, pode atualizar a flag no Supabase aqui, para evitar envio duplicado
+      // Exemplo (supondo que você tem client supabase configurado):
+      // await supabase.from('cobrancas').update({ mensagem_enviada: true }).eq('txid', newRow.txid);
+    } catch (err) {
+      console.error('Erro ao enviar mensagem:', err);
+    }
+  }
+
+  res.status(200).send('Webhook recebido');
+});
+
+// Sua função para enviar mensagem no WhatsApp
+async function enviarMensagemWhatsApp(telefone, texto) {
+  // Aqui é sua instância do Baileys conectada (ex: sock)
+  // Formate o telefone: deve ser algo tipo "5531999999999@s.whatsapp.net"
+  const jid = telefone.replace(/\D/g, '') + '@s.whatsapp.net'; 
+
+  // Exemplo simples:
+  await sock.sendMessage(jid, { text: texto });
+}
+
+// Porta padrão 3000
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Webhook rodando na porta ${PORT}`));
