@@ -4,9 +4,14 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
-// SOLUÇÃO DEFINITIVA - FORMA COMPROVADA
-import { makeWASocket, DisconnectReason } from '@whiskeysockets/baileys';
-import { useSingleFileAuthState } from '@whiskeysockets/baileys';
+// SOLUÇÃO DEFINITIVA PARA IMPORTAÇÃO
+import pkg from '@whiskeysockets/baileys';
+const { 
+  makeWASocket, 
+  useSingleFileAuthState, 
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = pkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -64,10 +69,12 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // USO CORRETO - FORMA COMPROVADA
+  // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
+  const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
