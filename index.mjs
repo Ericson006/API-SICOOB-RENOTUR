@@ -74,19 +74,6 @@ async function startBot() {
 
     // Importação DINÂMICA do Baileys (somente o necessário)
     const { default: baileys } = await import('@whiskeysockets/baileys');
-    
-    // Configuração do socket otimizada para memória
-    const sock = baileys.makeWASocket({
-      auth: state,
-      printQRInTerminal: true,
-      logger: {
-        level: 'silent',
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-      },
-      getMessage: async () => ({}) // Evita cache de mensagens
-    });
 
     // Salva credenciais automaticamente
     sock.ev.on('creds.update', saveCreds);
