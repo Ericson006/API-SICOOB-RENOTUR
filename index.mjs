@@ -205,3 +205,28 @@ process.on('SIGINT', async () => {
   supabase.removeAllChannels();
   process.exit(0);
 });
+
+// listener.mjs
+import pkg from 'pg';
+const { Client } = pkg;
+
+const client = new Client({
+  connectionString: process.env.SUPABASE_DB_URL, // ex: postgres://user:pass@host:port/dbname
+});
+
+await client.connect();
+
+// Escuta o canal 'pagamento_confirmado'
+await client.query('LISTEN pagamento_confirmado');
+
+console.log('🟢 Aguardando confirmações de pagamento...');
+
+client.on('notification', async (msg) => {
+  if (msg.channel === 'pagamento_confirmado') {
+    const payload = JSON.parse(msg.payload);
+    console.log('✅ Pagamento confirmado:', payload);
+
+    // Aqui você pode chamar sua função do WhatsApp:
+    // await enviarMensagemWhatsApp(payload);
+  }
+});
