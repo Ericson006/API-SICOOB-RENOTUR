@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
-    "@whiskeysockets/baileys": "6.7.4",  // Versão estável comprovada
+    "@whiskeysockets/baileys": "6.7.4",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2"
   },
   "engines": {
-    "node": "18.x"  // Node 18 funciona melhor com esta versão
+    "node": "18.x"  
   }
 }
