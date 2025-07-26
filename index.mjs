@@ -61,34 +61,37 @@ async function startBot() {
   const authLoaded = await baixarAuthDoSupabase();
   if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
-  // SOLUÇÃO 100% MANUAL - SEM DEPENDÊNCIA DE FUNÇÕES EXTERNAS
+  // SOLUÇÃO COMPLETA PARA O HANDSHAKE
   const authFile = `${authFolder}/creds.json`;
-  let creds = {};
+  let state = { 
+    creds: {}, 
+    keys: {} 
+  };
   
   try {
     const data = await fs.readFile(authFile, 'utf-8');
-    creds = JSON.parse(data);
+    state = JSON.parse(data);
     console.log('🔑 Credenciais carregadas com sucesso');
   } catch (error) {
     console.warn('⚠️ Criando novo arquivo de autenticação');
   }
 
-  // Função para salvar o estado - COMPLETAMENTE MANUAL
+  // Função para salvar o estado
   const saveState = () => {
-    fs.writeFile(authFile, JSON.stringify(creds, null, 2))
+    fs.writeFile(authFile, JSON.stringify(state, null, 2))
       .then(() => console.log('💾 Credenciais salvas'))
       .catch(err => console.error('❌ Erro ao salvar credenciais:', err));
   };
 
-  // Importação DINÂMICA do Baileys para evitar conflitos de inicialização
+  // Importação DINÂMICA do Baileys para evitar conflitos
   const { default: baileys } = await import('@whiskeysockets/baileys');
   const { DisconnectReason } = baileys;
 
-  // Configuração simplificada do socket
+  // Configuração correta do socket com todas as chaves necessárias
   const sock = baileys.makeWASocket({
     auth: {
-      creds,
-      keys: {}
+      creds: state.creds,
+      keys: baileys.initInMemoryKeyStore(state.keys) // SOLUÇÃO CHAVE
     },
     printQRInTerminal: true,
     // Logger mínimo para evitar problemas
@@ -102,8 +105,16 @@ async function startBot() {
   });
 
   sock.ev.on('creds.update', (updatedCreds) => {
-    creds = updatedCreds;
+    state.creds = updatedCreds;
     saveState();
+  });
+
+  // Atualiza as chaves quando necessário
+  sock.ev.on('keys.update', (keyUpdate) => {
+    if (keyUpdate.keys) {
+      state.keys = keyUpdate.keys;
+      saveState();
+    }
   });
 
   sock.ev.on('connection.update', (update) => {
