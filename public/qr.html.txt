@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>QR Code do WhatsApp</title>
+</head>
+<body>
+  <h1>Escaneie o QR Code abaixo</h1>
+  <img id="qrcode" src="" alt="QR Code">
+  <script>
+    async function buscarQRCode() {
+      try {
+        const res = await fetch('/qr');
+        const data = await res.json();
+        if (data.qr) {
+          document.getElementById('qrcode').src = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(data.qr)}&size=250x250`;
+        } else {
+          document.body.innerHTML = "<h2>QR Code expirado ou já conectado</h2>";
+        }
+      } catch (err) {
+        document.body.innerHTML = "<h2>Erro ao carregar o QR Code</h2>";
+      }
+    }
+    buscarQRCode();
+    setInterval(buscarQRCode, 7000); // atualiza a cada 7s
+  </script>
+</body>
+</html>
