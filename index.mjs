@@ -166,7 +166,7 @@ app.get('/qr', (req, res) => {
 // Rota raiz serve o QR gerado como imagem (modo simples direto no navegador)
 app.get('/', async (req, res) => {
   try {
-    const qrImage = await QRCode.toDataURL(latestQR); // latestQR precisa estar definido globalmente
+    const qrImage = await QRCode.toDataURL(ultimoQR); 
     res.send(`
       <html>
         <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
