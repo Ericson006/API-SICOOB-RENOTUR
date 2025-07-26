@@ -4,9 +4,15 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
+import pkg from '@whiskeysockets/baileys'; // Importação correta
 
-// SOLUÇÃO DEFINITIVA - Usando uma versão específica e estável do Baileys
-import { makeWASocket, useSingleFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+// Desestruturação das funções necessárias
+const { 
+  makeWASocket, 
+  useSingleFileAuthState, 
+  DisconnectReason,
+  fetchLatestBaileysVersion
+} = pkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -66,8 +72,10 @@ async function startBot() {
 
   // USO CORRETO - FORMA VERIFICADA
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
+  const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
