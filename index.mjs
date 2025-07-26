@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
 // Importação CORRETA do Baileys v6.x
-import { makeWASocket } from '@whiskeysockets/baileys';
-import { useSingleFileAuthState } from '@whiskeysockets/baileys/lib/Utils/auth-state';
+import pkg from '@whiskeysockets/baileys';
+const { makeWASocket, useSingleFileAuthState, DisconnectReason } = pkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -66,7 +66,10 @@ async function startBot() {
 
   // USO CORRETO da função
   const { state, saveState } = useSingleFileAuthState(`${authFolder}/creds.json`);
+  const { version } = await fetchLatestBaileysVersion();
+  
   const sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: true,
     logger: { level: 'warn' }
@@ -76,12 +79,44 @@ async function startBot() {
 
   sock.ev.on('connection.update', (update) => {
     if (update.connection === 'close') {
-      console.log('🔌 Conexão encerrada. Reconectando...');
-      setTimeout(startBot, 5000);
+      const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log(`🔌 Conexão encerrada. ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
+      if (shouldReconnect) setTimeout(startBot, 5000);
     } else if (update.connection === 'open') {
       console.log('✅ Conectado ao WhatsApp!');
     }
   });
+}
+
+// Função para escutar mudanças no Supabase
+function escutarSupabase(sock) {
+  supabase
+    .channel('pagamentos-channel')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'pagamentos',
+      filter: 'status=eq.concluido'
+    }, async (payload) => {
+      const pagamento = payload.new;
+      if (pagamento.mensagem_enviada) return;
+
+      const numero = `${pagamento.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
+      const mensagem = pagamento.mensagem_confirmação || '✅ Pagamento confirmado! Obrigado.';
+
+      try {
+        await sock.sendMessage(numero, { text: mensagem });
+        console.log(`📤 Mensagem enviada para ${numero}`);
+        
+        await supabase
+          .from('pagamentos')
+          .update({ mensagem_enviada: true })
+          .eq('txid', pagamento.txid);
+      } catch (error) {
+        console.error('⚠️ Erro ao enviar mensagem:', error.message);
+      }
+    })
+    .subscribe();
 }
 
 // Inicialização segura
