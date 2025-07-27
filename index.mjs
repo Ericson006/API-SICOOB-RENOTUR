@@ -146,53 +146,44 @@ function iniciarServicos(sock) {
 }
 
 function escutarSupabase(sock) {
-  console.log('🔔 Configurando listener do Supabase...');
-
-  // 1. Criação do canal com reconexão automática
+  console.log('🔔 Iniciando escuta do Supabase para a tabela COBRANCAS...');
+  
   const channel = supabase
-    .channel('pagamentos-realtime-v2', {
-      config: { 
-        presence: { key: 'pagamentos-listener' },
-        broadcast: { self: true }
-      }
-    })
+    .channel('cobrancas-channel')
     .on('postgres_changes', {
       event: 'UPDATE',
       schema: 'public',
-      table: 'pagamentos'
+      table: 'cobrancas',  // ← Nome corrigido aqui
+      filter: 'status=eq.concluido'
     }, async (payload) => {
-      console.log('📦 Evento recebido:', JSON.stringify(payload, null, 2));
-      
-      // 2. Validação rigorosa dos dados
-      if (!payload.new || payload.new.status !== 'concluido' || payload.new.mensagem_enviada) {
-        return console.log('⏭️ Evento ignorado (não é um pagamento concluído)');
+      const cobranca = payload.new;
+      if (cobranca.mensagem_enviada) {
+        console.log('⏭️ Mensagem já enviada para esta cobrança');
+        return;
       }
 
+      const numero = `${cobranca.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
+      console.log(`📞 Tentando enviar para: ${numero}`);
+      
+      const mensagem = cobranca.mensagem_confirmação || '✅ Cobrança confirmada! Obrigado.';
+
       try {
-        // 3. Formatação garantida do número
-        const numero = String(payload.new.telefone_cliente).replace(/\D/g, '');
-        if (numero.length < 11) {
-          throw new Error(`Número inválido: ${payload.new.telefone_cliente}`);
-        }
-        const jid = `${numero}@s.whatsapp.net`;
+        if (!sock) throw new Error('WhatsApp não conectado');
         
-        // 4. Envio da mensagem
-        console.log(`📤 Enviando para ${jid}...`);
-        await sock.sendMessage(jid, { 
-          text: payload.new.mensagem_confirmação || '✅ Pagamento confirmado com sucesso!' 
-        });
+        console.log('✉️ Enviando mensagem...');
+        await sock.sendMessage(numero, { text: mensagem });
+        console.log(`📤 Mensagem enviada para ${numero}`);
         
-        // 5. Atualização no banco
         const { error } = await supabase
-          .from('pagamentos')
+          .from('cobrancas')  // ← Nome corrigido aqui
           .update({ mensagem_enviada: true })
-          .eq('txid', payload.new.txid);
-        
+          .eq('txid', cobranca.txid);
+          
         if (error) throw error;
-        console.log('✔️ Pagamento marcado como notificado');
+        console.log('✔️ Cobrança marcada como notificada');
         
       } catch (error) {
-        console.error('❌ Falha no processamento:', {
+        console.error('❌ Erro ao processar cobrança:', {
           error: error.message,
           payload,
           stack: error.stack
@@ -201,16 +192,15 @@ function escutarSupabase(sock) {
     })
     .subscribe((status, err) => {
       if (err) {
-        console.error('❌ Falha na conexão com Supabase Realtime:', err);
+        console.error('❌ Erro na conexão com Supabase:', err);
         setTimeout(() => escutarSupabase(sock), 5000);
       } else {
-        console.log('🔔 Conexão com Supabase Realtime estabelecida!');
+        console.log('✅ Listener de cobranças ativo!');
       }
     });
 
   return channel;
 }
-
 // Rotas do Express
 
 // Health check
@@ -245,30 +235,32 @@ app.get('/', async (req, res) => {
 // Endpoint para receber webhook do Supabase
 app.post('/webhook', async (req, res) => {
   const payload = req.body;
-
-  console.log('Recebi webhook:', JSON.stringify(payload, null, 2));
+  console.log('Webhook recebido:', JSON.stringify(payload, null, 2));
 
   const oldRow = payload.old;
   const newRow = payload.new;
 
   if (oldRow?.status === 'PENDENTE' && newRow?.status === 'CONCLUIDO') {
     const telefone = newRow.telefone_cliente;
-    const mensagem = 'Seu pagamento foi confirmado. Muito obrigado por escolher a Renotur!';
+    const mensagem = 'Sua cobrança foi confirmada. Muito obrigado!';
 
     try {
       if (sock) {
         const jid = telefone.replace(/\D/g, '') + '@s.whatsapp.net';
         await sock.sendMessage(jid, { text: mensagem });
-        console.log('Mensagem enviada para', jid);
-      } else {
-        console.warn('⚠️ WhatsApp não conectado - mensagem não enviada');
+        console.log(`📤 Mensagem enviada via webhook para ${jid}`);
+        
+        await supabase
+          .from('cobrancas')  // ← Nome corrigido aqui
+          .update({ mensagem_enviada: true })
+          .eq('txid', newRow.txid);
       }
     } catch (err) {
-      console.error('Erro ao enviar mensagem:', err);
+      console.error('Erro no webhook:', err);
     }
   }
 
-  res.status(200).send('Webhook recebido');
+  res.status(200).send('OK');
 });
 
 // Inicialização do servidor
