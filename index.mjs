@@ -246,6 +246,20 @@ app.listen(PORT, () => {
   startServer();
 });
 
+app.get('/teste-envio', async (req, res) => {
+  const numeroTeste = '5533984063915@s.whatsapp.net'; // Substitua pelo seu número
+  
+  try {
+    await sock.sendMessage(numeroTeste, { 
+      text: '✅ Mensagem de TESTE do bot' 
+    });
+    res.send('Mensagem enviada! Verifique seu WhatsApp');
+  } catch (error) {
+    console.error('Erro no teste:', error);
+    res.status(500).send('Erro ao enviar: ' + error.message);
+  }
+});
+
 // Limpeza ao sair
 process.on('SIGINT', async () => {
   console.log('🛑 Desconectando...');
