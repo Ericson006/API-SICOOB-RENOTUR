@@ -288,7 +288,7 @@ async function processarCobranca(cobranca) {
     }).replace(',', ' -');
 
     const mensagem = cobranca.mensagem_confirmação || 
-      `✅ Pagamento confirmado!\n` +
+      `✅ Pagamento confirmado! Obrigado por confiar na Renotur ✨🚌\n` +
       `💵 Valor: R$${valorFormatado}\n` +
       `📅 Data: ${dataFormatada}`;
 
