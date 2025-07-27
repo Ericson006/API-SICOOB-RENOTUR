@@ -275,12 +275,12 @@ async function processarCobranca(cobranca) {
       tempo_envio: `${(new Date() - inicioEnvio)}ms`
     });
 
-    // 4. Atualização no banco de dados
+    // 4. Atualização no banco de dados - CORREÇÃO AQUI
     console.log('\n💾 Atualizando status no Supabase...');
     const { error } = await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: true,
+        mensagem_enviada: true,  // Usando a coluna correta
         data_envio: new Date().toISOString()
       })
       .eq('txid', cobranca.txid);
@@ -305,7 +305,7 @@ async function processarCobranca(cobranca) {
         .from('cobrancas')
         .update({ 
           mensagem_erro: error.message.substring(0, 255),
-          mensagem_enviada: true
+          mensagem_enviada: false  // Marcando como não enviada em caso de erro
         })
         .eq('txid', cobranca.txid);
       console.log('✔️ Erro registrado no banco de dados');
