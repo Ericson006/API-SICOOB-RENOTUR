@@ -73,28 +73,26 @@ async function baixarAuthDoSupabase() {
 
 async function startBot() {
   try {
-    // 1. Limpeza inicial
+    // Limpeza e preparação
     await fs.rm(authFolder, { recursive: true, force: true });
     await fs.mkdir(authFolder, { recursive: true });
 
-    // 2. Configuração robusta do Baileys
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { default: baileys } = await import('@whiskeysockets/baileys');
+    const { default: makeWASocket } = await import('@whiskeysockets/baileys');
 
-    const sock = baileys.makeWASocket({
+    // Configuração robusta sem defaultLogger
+    const sock = makeWASocket({
       auth: state,
-      logger: baileys.defaultLogger({ level: 'debug' }),
-      printQRInTerminal: false, // Removido o deprecated
+      printQRInTerminal: false,
       getMessage: async () => ({}),
-      browser: ["Ubuntu", "Chrome", "20.0.0"] // Fixo para evitar problemas
+      browser: ["Ubuntu", "Chrome", "20.0.0"]
     });
 
-    // 3. Gerenciamento de QR Code manual
+    // Gerenciamento de QR Code manual
     let qrGenerated = false;
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      // Geração do QR Code
       if (qr && !qrGenerated) {
         ultimoQR = qr;
         qrGenerated = true;
@@ -106,7 +104,6 @@ async function startBot() {
         });
       }
 
-      // Tratamento de conexão
       if (connection === 'close') {
         const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
         console.log(`🔌 Conexão fechada, ${shouldReconnect ? 'reconectando...' : 'faça login novamente'}`);
@@ -116,7 +113,7 @@ async function startBot() {
         }
       } else if (connection === 'open') {
         console.log('✅ WhatsApp conectado com SUCESSO!');
-        iniciarServicos(sock); // Função que inicia todos os serviços
+        escutarSupabase(sock);
       }
     });
 
@@ -125,8 +122,11 @@ async function startBot() {
 
     return sock;
   } catch (error) {
-    console.error('🚨 ERRO CRÍTICO no bot:', error);
-    setTimeout(startBot, 20000); // Reconexão mais robusta
+    console.error('🚨 ERRO no bot:', {
+      message: error.message,
+      stack: error.stack
+    });
+    setTimeout(startBot, 20000);
   }
 }
 
@@ -146,60 +146,40 @@ function iniciarServicos(sock) {
 }
 
 function escutarSupabase(sock) {
-  console.log('🔔 Iniciando escuta do Supabase para a tabela COBRANCAS...');
-  
+  console.log('🔔 Iniciando escuta da tabela cobrancas...');
+
   const channel = supabase
-    .channel('cobrancas-channel')
+    .channel('cobrancas-realtime')
     .on('postgres_changes', {
       event: 'UPDATE',
       schema: 'public',
-      table: 'cobrancas',  // ← Nome corrigido aqui
+      table: 'cobrancas',
       filter: 'status=eq.concluido'
     }, async (payload) => {
-      const cobranca = payload.new;
-      if (cobranca.mensagem_enviada) {
-        console.log('⏭️ Mensagem já enviada para esta cobrança');
-        return;
-      }
-
-      const numero = `${cobranca.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
-      console.log(`📞 Tentando enviar para: ${numero}`);
-      
-      const mensagem = cobranca.mensagem_confirmação || '✅ Cobrança confirmada! Obrigado.';
-
       try {
-        if (!sock) throw new Error('WhatsApp não conectado');
+        console.log('📦 Evento recebido:', payload);
         
-        console.log('✉️ Enviando mensagem...');
-        await sock.sendMessage(numero, { text: mensagem });
-        console.log(`📤 Mensagem enviada para ${numero}`);
+        if (payload.new.mensagem_enviada) return;
         
-        const { error } = await supabase
-          .from('cobrancas')  // ← Nome corrigido aqui
-          .update({ mensagem_enviada: true })
-          .eq('txid', cobranca.txid);
-          
-        if (error) throw error;
-        console.log('✔️ Cobrança marcada como notificada');
-        
-      } catch (error) {
-        console.error('❌ Erro ao processar cobrança:', {
-          error: error.message,
-          payload,
-          stack: error.stack
+        const numero = `${payload.new.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
+        await sock.sendMessage(numero, {
+          text: payload.new.mensagem_confirmação || '✅ Cobrança confirmada!'
         });
+        
+        await supabase
+          .from('cobrancas')
+          .update({ mensagem_enviada: true })
+          .eq('txid', payload.new.txid);
+          
+        console.log('✔️ Mensagem enviada e registro atualizado');
+      } catch (error) {
+        console.error('❌ Erro no processamento:', error.message);
       }
     })
     .subscribe((status, err) => {
-      if (err) {
-        console.error('❌ Erro na conexão com Supabase:', err);
-        setTimeout(() => escutarSupabase(sock), 5000);
-      } else {
-        console.log('✅ Listener de cobranças ativo!');
-      }
+      if (err) console.error('❌ Erro na conexão:', err);
+      else console.log('✅ Listener ativo (status:', status, ')');
     });
-
-  return channel;
 }
 // Rotas do Express
 
