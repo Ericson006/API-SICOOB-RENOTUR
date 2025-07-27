@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { useMultiFileAuthState, DisconnectReason, makeWASocket } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 
 // Configuração de paths
@@ -31,7 +31,7 @@ const bucket = 'auth-session';
 
 // Variáveis globais
 let ultimoQR = null;
-let sock = null; // Instância do socket do WhatsApp
+let sock = null;
 let reconectando = false;
 
 // Configuração do Express
@@ -73,130 +73,97 @@ async function baixarAuthDoSupabase() {
 
 async function startBot() {
   try {
-    // Limpeza e preparação
-    await fs.rm(authFolder, { recursive: true, force: true });
-    await fs.mkdir(authFolder, { recursive: true });
+    const authLoaded = await baixarAuthDoSupabase();
+    if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { default: makeWASocket } = await import('@whiskeysockets/baileys');
 
-    // Configuração robusta sem defaultLogger
-    const sock = makeWASocket({
+    sock = makeWASocket({
       auth: state,
-      printQRInTerminal: false,
-      getMessage: async () => ({}),
-      browser: ["Ubuntu", "Chrome", "20.0.0"]
+      printQRInTerminal: true,
+      getMessage: async () => ({})
     });
 
-    // Gerenciamento de QR Code manual
-    let qrGenerated = false;
+    sock.ev.on('creds.update', saveCreds);
+
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update;
-      
-      if (qr && !qrGenerated) {
+
+      if (qr) {
         ultimoQR = qr;
-        qrGenerated = true;
-        QRCode.toString(qr, { type: 'terminal', small: true }, (err, url) => {
-          if (!err) {
-            console.log('🆕 QR Code para conexão:');
-            console.log(url);
-          }
+        console.log('🆕 Novo QR Code gerado');
+        QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
+          if (!err) console.log(url);
         });
       }
 
       if (connection === 'close') {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log(`🔌 Conexão fechada, ${shouldReconnect ? 'reconectando...' : 'faça login novamente'}`);
-        
-        if (shouldReconnect) {
-          setTimeout(startBot, 10000);
+        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+        console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
+
+        if (shouldReconnect && !reconectando) {
+          reconectando = true;
+          setTimeout(() => {
+            startBot().then(() => reconectando = false);
+          }, 10000);
         }
       } else if (connection === 'open') {
-        console.log('✅ WhatsApp conectado com SUCESSO!');
-        escutarSupabase(sock);
+        console.log('✅ Conectado ao WhatsApp!');
+        escutarSupabase();
       }
     });
 
-    sock.ev.on('creds.update', saveCreds);
-    sock.ev.on('messages.upsert', () => {});
-
     return sock;
   } catch (error) {
-    console.error('🚨 ERRO no bot:', {
-      message: error.message,
-      stack: error.stack
-    });
-    setTimeout(startBot, 20000);
+    console.error('🚨 Erro ao iniciar bot:', error);
+    throw error;
   }
 }
 
-function iniciarServicos(sock) {
-  console.log('🛠️ Iniciando todos os serviços...');
+function escutarSupabase() {
+  console.log('🔔 Iniciando escuta do Supabase para cobranças...');
   
-  // 1. Serviço do Supabase
-  escutarSupabase(sock);
-  
-  // 2. Verificação de saúde
-  setInterval(() => {
-    console.log('🏥 Status:', {
-      memory: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`,
-      connection: sock.user ? 'OK' : 'OFFLINE'
-    });
-  }, 60000);
-}
-
-function escutarSupabase(sock) {
-  console.log('🔔 Iniciando escuta da tabela cobrancas...');
-
   const channel = supabase
-    .channel('cobrancas-realtime')
+    .channel('cobrancas-channel')
     .on('postgres_changes', {
       event: 'UPDATE',
       schema: 'public',
       table: 'cobrancas',
       filter: 'status=eq.concluido'
     }, async (payload) => {
+      const cobranca = payload.new;
+      if (cobranca.mensagem_enviada) return;
+
+      const numero = `${cobranca.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
+      const mensagem = cobranca.mensagem_confirmação || '✅ Cobrança confirmada! Obrigado.';
+
       try {
-        console.log('📦 Evento recebido:', payload);
-        
-        if (payload.new.mensagem_enviada) return;
-        
-        const numero = `${payload.new.telefone_cliente.replace(/\D/g, '')}@s.whatsapp.net`;
-        await sock.sendMessage(numero, {
-          text: payload.new.mensagem_confirmação || '✅ Cobrança confirmada!'
-        });
+        await sock.sendMessage(numero, { text: mensagem });
+        console.log(`📤 Mensagem enviada para ${numero}`);
         
         await supabase
           .from('cobrancas')
           .update({ mensagem_enviada: true })
-          .eq('txid', payload.new.txid);
-          
-        console.log('✔️ Mensagem enviada e registro atualizado');
+          .eq('txid', cobranca.txid);
       } catch (error) {
-        console.error('❌ Erro no processamento:', error.message);
+        console.error('⚠️ Erro ao enviar mensagem:', error.message);
       }
     })
-    .subscribe((status, err) => {
-      if (err) console.error('❌ Erro na conexão:', err);
-      else console.log('✅ Listener ativo (status:', status, ')');
-    });
+    .subscribe();
 }
-// Rotas do Express
 
-// Health check
+// Rotas do Express
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Rota para retornar o QR em JSON
 app.get('/qr', (req, res) => {
   res.json({ qr: ultimoQR });
 });
 
-// Rota raiz serve o QR gerado como imagem
 app.get('/', async (req, res) => {
   try {
-    if (!ultimoQR) {
-      return res.status(404).send('QR Code ainda não disponível');
-    }
+    if (!ultimoQR) return res.status(404).send('QR Code ainda não disponível');
     
     const qrImage = await QRCode.toDataURL(ultimoQR); 
     res.send(`
@@ -212,10 +179,9 @@ app.get('/', async (req, res) => {
   }
 });
 
-// Endpoint para receber webhook do Supabase
 app.post('/webhook', async (req, res) => {
   const payload = req.body;
-  console.log('Webhook recebido:', JSON.stringify(payload, null, 2));
+  console.log('Recebi webhook:', JSON.stringify(payload, null, 2));
 
   const oldRow = payload.old;
   const newRow = payload.new;
@@ -228,24 +194,20 @@ app.post('/webhook', async (req, res) => {
       if (sock) {
         const jid = telefone.replace(/\D/g, '') + '@s.whatsapp.net';
         await sock.sendMessage(jid, { text: mensagem });
-        console.log(`📤 Mensagem enviada via webhook para ${jid}`);
-        
-        await supabase
-          .from('cobrancas')  // ← Nome corrigido aqui
-          .update({ mensagem_enviada: true })
-          .eq('txid', newRow.txid);
+        console.log('Mensagem enviada para', jid);
       }
     } catch (err) {
-      console.error('Erro no webhook:', err);
+      console.error('Erro ao enviar mensagem:', err);
     }
   }
 
-  res.status(200).send('OK');
+  res.status(200).send('Webhook recebido');
 });
 
-// Inicialização do servidor
-async function startServer() {
-  // Monitoramento de memória
+// Inicialização
+app.listen(PORT, async () => {
+  console.log(`🩺 Servidor rodando na porta ${PORT}`);
+  
   setInterval(() => {
     const used = process.memoryUsage().heapUsed / 1024 / 1024;
     console.log(`🚀 Uso de memória: ${Math.round(used * 100) / 100} MB`);
@@ -258,28 +220,8 @@ async function startServer() {
     console.error('💥 Erro fatal ao iniciar bot:', error);
     process.exit(1);
   }
-}
-
-app.listen(PORT, () => {
-  console.log(`🩺 Servidor rodando na porta ${PORT}`);
-  startServer();
 });
 
-// Adicione esta rota para testes manuais
-app.get('/teste-cobranca', async (req, res) => {
-  try {
-    await supabase
-      .from('cobrancas')
-      .update({ status: 'concluido', mensagem_enviada: false })
-      .eq('txid', 'teste-123');
-      
-    res.send('Atualização de teste disparada! Verifique os logs.');
-  } catch (error) {
-    res.status(500).send('Erro: ' + error.message);
-  }
-});
-
-// Limpeza ao sair
 process.on('SIGINT', async () => {
   console.log('🛑 Desconectando...');
   supabase.removeAllChannels();
