@@ -161,21 +161,20 @@ async function verificarCobrancasPendentes() {
   console.log(`\n🔍 Verificação ${contadorPolling} iniciada em ${new Date().toISOString()}`);
 
   try {
-    // 1. Consulta otimizada para pegar apenas cobranças recentes não processadas
+    // Consulta otimizada para cobranças recentes não processadas
     const { data: cobrancas, error, count } = await supabase
       .from('cobrancas')
       .select('*', { count: 'exact' })
       .or('status.eq.concluido,status.eq.Concluído,status.eq.CONCLUIDO')
       .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
-      .not('created_at', 'is', null) // Exclui registros sem data
-      .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // Últimos 7 dias
+      .not('created_at', 'is', null)
+      .gt('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(10);
 
     console.log('🔍 Resultado da consulta:', {
       total_encontrado: count,
       periodo: 'últimos 7 dias',
-      com_data: true,
       erro: error?.message
     });
 
@@ -185,19 +184,6 @@ async function verificarCobrancasPendentes() {
       console.log(`📦 ${cobrancas.length} cobrança(s) recentes para processar`);
       
       for (const cobranca of cobrancas) {
-        console.log(`⚙️ Processando TXID: ${cobranca.txid}`, {
-          status: cobranca.status,
-          telefone: cobranca.telefone_cliente,
-          created_at: cobranca.created_at
-        });
-        
-        // Verifica se o telefone existe
-        if (!cobranca.telefone_cliente) {
-          console.error('❌ Telefone não informado na cobrança');
-          await marcarComoErro(cobranca.txid, 'Telefone do cliente não informado');
-          continue;
-        }
-
         await processarCobranca(cobranca);
       }
     } else {
@@ -205,35 +191,31 @@ async function verificarCobrancasPendentes() {
     }
 
   } catch (error) {
-    console.error('❌ Erro no polling:', error.message);
-  }
-}
-
-async function marcarComoErro(txid, motivo) {
-  try {
-    await supabase
-      .from('cobrancas')
-      .update({ 
-        mensagem_erro: motivo.substring(0, 255),
-        mensagem_enviada: true // Marca como processada para não tentar novamente
-      })
-      .eq('txid', txid);
-  } catch (dbError) {
-    console.error('❌ Falha ao registrar erro:', dbError.message);
+    console.error('❌ Erro no polling:', {
+      message: error.message,
+      stack: error.stack
+    });
   }
 }
 
 async function processarCobranca(cobranca) {
   try {
-    // Formatação robusta do telefone
-    const numeroTelefone = String(cobranca.telefone_cliente).replace(/\D/g, '');
-    if (numeroTelefone.length < 11) {
-      throw new Error('Número de telefone inválido');
+    console.log(`\n🔄 Processando cobrança TXID: ${cobranca.txid}...`);
+    
+    // Validação do telefone
+    const telefoneLimpo = String(cobranca.telefone_cliente).replace(/\D/g, '');
+    if (!telefoneLimpo || telefoneLimpo.length < 11) {
+      throw new Error('Telefone inválido ou não informado');
     }
     
-    const numeroWhatsapp = `55${numeroTelefone}@s.whatsapp.net`;
-    const valorFormatado = cobranca.valor?.toFixed(2).replace('.', ',') || '0,00';
+    const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
     
+    // Formatação do valor
+    const valorFormatado = cobranca.valor 
+      ? cobranca.valor.toFixed(2).replace('.', ',') 
+      : '0,00';
+    
+    // Mensagem personalizada ou padrão
     const mensagem = cobranca.mensagem_confirmação || 
       `✅ Cobrança #${cobranca.txid} confirmada!\n` +
       `💵 Valor: R$${valorFormatado}\n` +
@@ -242,46 +224,16 @@ async function processarCobranca(cobranca) {
     console.log(`📞 Enviando para: ${numeroWhatsapp}`);
     console.log(`✉️ Mensagem: ${mensagem}`);
 
+    // Envio da mensagem
     await sock.sendMessage(numeroWhatsapp, { text: mensagem });
     console.log(`📤 Mensagem enviada com sucesso`);
 
-    await supabase
-      .from('cobrancas')
-      .update({ 
-        mensagem_enviada: true,
-        data_envio: new Date().toISOString()
-      })
-      .eq('txid', cobranca.txid);
-
-    console.log(`✔️ Cobrança ${cobranca.txid} marcada como notificada`);
-
-  } catch (error) {
-    console.error(`⚠️ Falha ao processar cobrança ${cobranca.txid}:`, error.message);
-    await marcarComoErro(cobranca.txid, error.message);
-  }
-}
-async function processarCobranca(cobranca) {
-  try {
-    console.log(`\n🔄 Processando cobrança TXID: ${cobranca.txid}...`);
-    
-    const numero = `55${String(cobranca.telefone_cliente).replace(/\D/g, '')}@s.whatsapp.net`;
-    
-    const mensagem = cobranca.mensagem_confirmação || 
-                    `✅ Cobrança #${cobranca.txid} confirmada!\n` +
-                    `💵 Valor: R$${cobranca.valor || '0,00'}\n` +
-                    `📅 Data: ${new Date().toLocaleDateString()}`;
-
-    console.log(`📞 Enviando para: ${numero}`);
-    console.log(`✉️ Mensagem: ${mensagem}`);
-
-    await sock.sendMessage(numero, { text: mensagem });
-    console.log(`📤 Mensagem enviada com sucesso`);
-
+    // Atualização no banco de dados
     const { error } = await supabase
       .from('cobrancas')
       .update({ 
         mensagem_enviada: true,
-        data_envio: new Date() 
+        data_envio: new Date().toISOString()
       })
       .eq('txid', cobranca.txid);
 
@@ -291,11 +243,13 @@ async function processarCobranca(cobranca) {
   } catch (error) {
     console.error(`⚠️ Falha ao processar cobrança ${cobranca.txid}:`, error.message);
     
+    // Marca a cobrança com erro no banco de dados
     try {
       await supabase
         .from('cobrancas')
         .update({ 
-          mensagem_erro: error.message.substring(0, 255) 
+          mensagem_erro: error.message.substring(0, 255),
+          mensagem_enviada: true // Para não reprocessar
         })
         .eq('txid', cobranca.txid);
     } catch (dbError) {
