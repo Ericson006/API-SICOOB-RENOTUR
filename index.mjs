@@ -22,7 +22,18 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_KEY,
+  {
+    db: {
+      schema: 'public',
+    },
+    global: {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    }
+  }
 );
 
 // Configurações do bot
@@ -35,6 +46,7 @@ let sock = null;
 let reconectando = false;
 let pollingInterval = null;
 let contadorPolling = 0;
+let ultimoIdProcessado = null;
 
 // Configuração do Express
 const app = express();
@@ -88,7 +100,7 @@ async function startBot() {
       auth: state,
       printQRInTerminal: true,
       getMessage: async () => ({}),
-      syncFullHistory: false, // Otimização de performance
+      syncFullHistory: false,
       shouldIgnoreJid: () => false,
       connectTimeoutMs: 30000
     });
@@ -120,32 +132,27 @@ async function startBot() {
         }
       } else if (connection === 'open') {
         console.log('✅ Conectado ao WhatsApp!');
-        iniciarPollingCobrancas(); // Inicia o polling quando conectado
+        iniciarPollingCobrancas();
       }
     });
 
     return sock;
   } catch (error) {
     console.error('🚨 Erro ao iniciar bot:', error);
-    setTimeout(startBot, 15000); // Tenta reconectar após 15 segundos
+    setTimeout(startBot, 15000);
     throw error;
   }
 }
 
 // ==============================================
-// SISTEMA DE POLLING ROBUSTO
+// SISTEMA DE POLLING ATUALIZADO
 // ==============================================
 
 function iniciarPollingCobrancas() {
-  // Para qualquer intervalo existente antes de iniciar novo
   if (pollingInterval) clearInterval(pollingInterval);
   
   console.log('🔄 Iniciando sistema de polling para cobranças...');
-  
-  // Primeira verificação imediata
   verificarCobrancasPendentes();
-  
-  // Configura o intervalo para verificar a cada 20 segundos
   pollingInterval = setInterval(verificarCobrancasPendentes, 20000);
 }
 
@@ -154,19 +161,31 @@ async function verificarCobrancasPendentes() {
   console.log(`\n🔍 Verificação ${contadorPolling} iniciada...`);
 
   try {
-    // Busca cobranças concluídas não notificadas (últimas 10)
-    const { data: cobrancas, error } = await supabase
+    let query = supabase
       .from('cobrancas')
       .select('*')
       .eq('status', 'concluido')
       .eq('mensagem_enviada', false)
-      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
       .limit(10);
+
+    if (ultimoIdProcessado) {
+      query = query.gt('id', ultimoIdProcessado);
+    }
+
+    const { data: cobrancas, error } = await query;
+
+    console.log('🔎 Resultado da consulta:', {
+      count: cobrancas?.length,
+      ultimoIdProcessado,
+      error: error?.message
+    });
 
     if (error) throw error;
 
     if (cobrancas && cobrancas.length > 0) {
       console.log(`📦 ${cobrancas.length} cobrança(s) para processar`);
+      ultimoIdProcessado = cobrancas[cobrancas.length - 1].id;
       
       for (const cobranca of cobrancas) {
         await processarCobranca(cobranca);
@@ -175,13 +194,13 @@ async function verificarCobrancasPendentes() {
       console.log('⏭️ Nenhuma cobrança pendente encontrada');
     }
 
-    // Log de recursos a cada 5 verificações
     if (contadorPolling % 5 === 0) {
       const used = process.memoryUsage().heapUsed / 1024 / 1024;
       console.log('📊 Status do Sistema:', {
         memoria: `${Math.round(used * 100) / 100} MB`,
         pollingCount: contadorPolling,
-        tempo: new Date().toLocaleTimeString()
+        tempo: new Date().toLocaleTimeString(),
+        ultimoIdProcessado
       });
     }
 
@@ -192,12 +211,10 @@ async function verificarCobrancasPendentes() {
 
 async function processarCobranca(cobranca) {
   try {
-    console.log(`\n🔄 Processando cobrança ${cobranca.txid}...`);
+    console.log(`\n🔄 Processando cobrança ID: ${cobranca.id} | TXID: ${cobranca.txid}...`);
     
-    // Formatação robusta do número
     const numero = `55${String(cobranca.telefone_cliente).replace(/\D/g, '')}@s.whatsapp.net`;
     
-    // Mensagem personalizável
     const mensagem = cobranca.mensagem_confirmação || 
                     `✅ Cobrança #${cobranca.txid} confirmada!\n` +
                     `💵 Valor: R$${cobranca.valor || '0,00'}\n` +
@@ -206,33 +223,30 @@ async function processarCobranca(cobranca) {
     console.log(`📞 Enviando para: ${numero}`);
     console.log(`✉️ Mensagem: ${mensagem}`);
 
-    // Envio com tratamento de erro
     await sock.sendMessage(numero, { text: mensagem });
     console.log(`📤 Mensagem enviada com sucesso`);
 
-    // Atualização no banco de dados
     const { error } = await supabase
       .from('cobrancas')
       .update({ 
         mensagem_enviada: true,
         data_envio: new Date() 
       })
-      .eq('txid', cobranca.txid);
+      .eq('id', cobranca.id);
 
     if (error) throw error;
-    console.log(`✔️ Cobrança marcada como notificada no banco de dados`);
+    console.log(`✔️ Cobrança ${cobranca.id} marcada como notificada`);
 
   } catch (error) {
-    console.error(`⚠️ Falha ao processar cobrança ${cobranca.txid}:`, error.message);
+    console.error(`⚠️ Falha ao processar cobrança ${cobranca.id}:`, error.message);
     
-    // Tentativa de marcar como erro para evitar repetições
     try {
       await supabase
         .from('cobrancas')
         .update({ 
           mensagem_erro: error.message.substring(0, 255) 
         })
-        .eq('txid', cobranca.txid);
+        .eq('id', cobranca.id);
     } catch (dbError) {
       console.error('❌ Não foi possível registrar o erro no banco:', dbError.message);
     }
@@ -240,18 +254,15 @@ async function processarCobranca(cobranca) {
 }
 
 // ==============================================
-// ROTAS PARA CONTROLE MANUAL
+// ROTAS PARA CONTROLE E DIAGNÓSTICO
 // ==============================================
 
-// Health Check
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// Rota do QR Code
 app.get('/qr', (req, res) => {
   res.json({ qr: ultimoQR });
 });
 
-// Página inicial com QR Code
 app.get('/', async (req, res) => {
   try {
     if (!ultimoQR) return res.status(404).send('QR Code ainda não disponível');
@@ -274,6 +285,7 @@ app.get('/', async (req, res) => {
             <img src="${qrImage}" style="max-width: 300px;"/>
             <p class="info">Escaneie este QR Code com o aplicativo do WhatsApp</p>
             <p class="info">Status: ${sock?.user ? '✅ Conectado' : '❌ Aguardando conexão'}</p>
+            <p class="info">Último ID processado: ${ultimoIdProcessado || 'Nenhum'}</p>
           </div>
         </body>
       </html>
@@ -283,13 +295,13 @@ app.get('/', async (req, res) => {
   }
 });
 
-// Rota para forçar verificação imediata
 app.get('/verificar-agora', async (req, res) => {
   try {
     await verificarCobrancasPendentes();
     res.json({ 
       status: 'Verificação concluída',
       contador: contadorPolling,
+      ultimoIdProcessado,
       memoria: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`
     });
   } catch (error) {
@@ -297,7 +309,6 @@ app.get('/verificar-agora', async (req, res) => {
   }
 });
 
-// Rota para testar envio manual
 app.get('/testar-envio/:telefone', async (req, res) => {
   const { telefone } = req.params;
   
@@ -323,6 +334,35 @@ app.get('/testar-envio/:telefone', async (req, res) => {
   }
 });
 
+// Rota para diagnóstico de cobrança específica
+app.get('/diagnostico-cobranca/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: cobranca, error } = await supabase
+      .from('cobrancas')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    
+    res.json({
+      cobranca,
+      criterios: {
+        statusConcluido: cobranca.status === 'concluido',
+        mensagemNaoEnviada: cobranca.mensagem_enviada === false,
+        deveSerProcessada: cobranca.status === 'concluido' && cobranca.mensagem_enviada === false
+      },
+      sistema: {
+        ultimoIdProcessado,
+        sockConectado: !!sock?.user
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==============================================
 // INICIALIZAÇÃO DO SERVIDOR
 // ==============================================
@@ -330,26 +370,21 @@ app.get('/testar-envio/:telefone', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🩺 Servidor rodando na porta ${PORT}`);
   
-  // Monitoramento de memória
   setInterval(() => {
     const used = process.memoryUsage().heapUsed / 1024 / 1024;
     console.log(`🚀 Uso de memória: ${Math.round(used * 100) / 100} MB`);
-  }, 60000); // A cada 1 minuto
+  }, 60000);
 
-  // Inicia o bot
   startBot().catch(err => {
     console.error('💥 Falha crítica ao iniciar bot:', err);
     process.exit(1);
   });
 });
 
-// Limpeza ao sair
 process.on('SIGINT', async () => {
   console.log('\n🛑 Desligando o servidor...');
-  
   if (pollingInterval) clearInterval(pollingInterval);
   if (sock) await sock.end();
-  
   console.log('✅ Servidor desligado com sucesso');
   process.exit(0);
 });
