@@ -254,16 +254,25 @@ async function processarCobranca(cobranca) {
     const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
     console.log('Número formatado para WhatsApp:', numeroWhatsapp);
 
-    // 2. Formatação da mensagem
+    // 2. Formatação da mensagem (sem TXID e com data/hora correta)
     console.log('\n✉️ Formatando mensagem...');
     const valorFormatado = cobranca.valor 
       ? cobranca.valor.toFixed(2).replace('.', ',') 
       : '0,00';
-    
+
+    const dataFormatada = new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).replace(',', ' -');
+
     const mensagem = cobranca.mensagem_confirmação || 
-      `✅ Cobrança #${cobranca.txid} confirmada!\n` +
+      `✅ Pagamento confirmado!\n` +
       `💵 Valor: R$${valorFormatado}\n` +
-      `📅 Data: ${new Date(cobranca.created_at).toLocaleDateString()}`;
+      `📅 Data: ${dataFormatada}`;
 
     console.log('Mensagem a ser enviada:', mensagem);
 
@@ -275,12 +284,12 @@ async function processarCobranca(cobranca) {
       tempo_envio: `${(new Date() - inicioEnvio)}ms`
     });
 
-    // 4. Atualização no banco de dados - CORREÇÃO AQUI
+    // 4. Atualização no banco de dados
     console.log('\n💾 Atualizando status no Supabase...');
     const { error } = await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: true,  // Usando a coluna correta
+        mensagem_enviada: true,
         data_envio: new Date().toISOString()
       })
       .eq('txid', cobranca.txid);
@@ -288,7 +297,6 @@ async function processarCobranca(cobranca) {
     if (error) throw error;
     console.log('✔️ Status atualizado no banco de dados');
 
-    // Atualiza o último TXID processado
     ultimoTxidProcessado = cobranca.txid;
 
   } catch (error) {
@@ -298,14 +306,13 @@ async function processarCobranca(cobranca) {
       stack: error.stack
     });
 
-    // Tentativa de marcar como erro no banco
     try {
       console.log('\n🔄 Tentando registrar erro no banco...');
       await supabase
         .from('cobrancas')
         .update({ 
           mensagem_erro: error.message.substring(0, 255),
-          mensagem_enviada: false  // Marcando como não enviada em caso de erro
+          mensagem_enviada: false
         })
         .eq('txid', cobranca.txid);
       console.log('✔️ Erro registrado no banco de dados');
