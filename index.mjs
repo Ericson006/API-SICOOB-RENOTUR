@@ -286,12 +286,14 @@ app.listen(PORT, () => {
 });
 
 // Adicione esta rota para testes manuais
-app.get('/enviar-manual', async (req, res) => {
+app.get('/teste-cobranca', async (req, res) => {
   try {
-    await sock.sendMessage('553384063915@s.whatsapp.net', {
-      text: 'Mensagem de teste manual enviada com sucesso!'
-    });
-    res.send('Verifique seu WhatsApp!');
+    await supabase
+      .from('cobrancas')
+      .update({ status: 'concluido', mensagem_enviada: false })
+      .eq('txid', 'teste-123');
+      
+    res.send('Atualização de teste disparada! Verifique os logs.');
   } catch (error) {
     res.status(500).send('Erro: ' + error.message);
   }
