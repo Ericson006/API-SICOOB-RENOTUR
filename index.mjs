@@ -46,7 +46,7 @@ let sock = null;
 let reconectando = false;
 let pollingInterval = null;
 let contadorPolling = 0;
-let ultimoIdProcessado = null;
+let ultimoTxidProcessado = null;
 
 // Configuração do Express
 const app = express();
@@ -145,7 +145,7 @@ async function startBot() {
 }
 
 // ==============================================
-// SISTEMA DE POLLING ATUALIZADO
+// SISTEMA DE POLLING ATUALIZADO PARA USAR TXID
 // ==============================================
 
 function iniciarPollingCobrancas() {
@@ -166,18 +166,19 @@ async function verificarCobrancasPendentes() {
       .select('*')
       .eq('status', 'concluido')
       .eq('mensagem_enviada', false)
-      .order('id', { ascending: true })
+      .order('created_at', { ascending: true })
       .limit(10);
 
-    if (ultimoIdProcessado) {
-      query = query.gt('id', ultimoIdProcessado);
+    if (ultimoTxidProcessado) {
+      // Como não temos um ID sequencial, usamos created_at para pegar registros mais recentes
+      query = query.gt('created_at', ultimoTxidProcessado);
     }
 
     const { data: cobrancas, error } = await query;
 
     console.log('🔎 Resultado da consulta:', {
       count: cobrancas?.length,
-      ultimoIdProcessado,
+      ultimoTxidProcessado,
       error: error?.message
     });
 
@@ -185,7 +186,8 @@ async function verificarCobrancasPendentes() {
 
     if (cobrancas && cobrancas.length > 0) {
       console.log(`📦 ${cobrancas.length} cobrança(s) para processar`);
-      ultimoIdProcessado = cobrancas[cobrancas.length - 1].id;
+      // Armazena a data da última cobrança processada
+      ultimoTxidProcessado = cobrancas[cobrancas.length - 1].created_at;
       
       for (const cobranca of cobrancas) {
         await processarCobranca(cobranca);
@@ -200,7 +202,7 @@ async function verificarCobrancasPendentes() {
         memoria: `${Math.round(used * 100) / 100} MB`,
         pollingCount: contadorPolling,
         tempo: new Date().toLocaleTimeString(),
-        ultimoIdProcessado
+        ultimoTxidProcessado
       });
     }
 
@@ -211,7 +213,7 @@ async function verificarCobrancasPendentes() {
 
 async function processarCobranca(cobranca) {
   try {
-    console.log(`\n🔄 Processando cobrança ID: ${cobranca.id} | TXID: ${cobranca.txid}...`);
+    console.log(`\n🔄 Processando cobrança TXID: ${cobranca.txid}...`);
     
     const numero = `55${String(cobranca.telefone_cliente).replace(/\D/g, '')}@s.whatsapp.net`;
     
@@ -232,13 +234,13 @@ async function processarCobranca(cobranca) {
         mensagem_enviada: true,
         data_envio: new Date() 
       })
-      .eq('id', cobranca.id);
+      .eq('txid', cobranca.txid);
 
     if (error) throw error;
-    console.log(`✔️ Cobrança ${cobranca.id} marcada como notificada`);
+    console.log(`✔️ Cobrança ${cobranca.txid} marcada como notificada`);
 
   } catch (error) {
-    console.error(`⚠️ Falha ao processar cobrança ${cobranca.id}:`, error.message);
+    console.error(`⚠️ Falha ao processar cobrança ${cobranca.txid}:`, error.message);
     
     try {
       await supabase
@@ -246,7 +248,7 @@ async function processarCobranca(cobranca) {
         .update({ 
           mensagem_erro: error.message.substring(0, 255) 
         })
-        .eq('id', cobranca.id);
+        .eq('txid', cobranca.txid);
     } catch (dbError) {
       console.error('❌ Não foi possível registrar o erro no banco:', dbError.message);
     }
@@ -285,7 +287,7 @@ app.get('/', async (req, res) => {
             <img src="${qrImage}" style="max-width: 300px;"/>
             <p class="info">Escaneie este QR Code com o aplicativo do WhatsApp</p>
             <p class="info">Status: ${sock?.user ? '✅ Conectado' : '❌ Aguardando conexão'}</p>
-            <p class="info">Último ID processado: ${ultimoIdProcessado || 'Nenhum'}</p>
+            <p class="info">Última cobrança processada: ${ultimoTxidProcessado || 'Nenhuma'}</p>
           </div>
         </body>
       </html>
@@ -301,7 +303,7 @@ app.get('/verificar-agora', async (req, res) => {
     res.json({ 
       status: 'Verificação concluída',
       contador: contadorPolling,
-      ultimoIdProcessado,
+      ultimoTxidProcessado,
       memoria: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)}MB`
     });
   } catch (error) {
@@ -334,14 +336,13 @@ app.get('/testar-envio/:telefone', async (req, res) => {
   }
 });
 
-// Rota para diagnóstico de cobrança específica
-app.get('/diagnostico-cobranca/:id', async (req, res) => {
+app.get('/diagnostico-cobranca/:txid', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { txid } = req.params;
     const { data: cobranca, error } = await supabase
       .from('cobrancas')
       .select('*')
-      .eq('id', id)
+      .eq('txid', txid)
       .single();
 
     if (error) throw error;
@@ -354,7 +355,7 @@ app.get('/diagnostico-cobranca/:id', async (req, res) => {
         deveSerProcessada: cobranca.status === 'concluido' && cobranca.mensagem_enviada === false
       },
       sistema: {
-        ultimoIdProcessado,
+        ultimoTxidProcessado,
         sockConectado: !!sock?.user
       }
     });
