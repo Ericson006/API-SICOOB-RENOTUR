@@ -155,198 +155,75 @@ function iniciarPollingCobrancas() {
   verificarCobrancasPendentes();
   pollingInterval = setInterval(verificarCobrancasPendentes, 20000);
 }
-
 async function verificarCobrancasPendentes() {
   contadorPolling++;
   const horaInicio = new Date();
   console.log(`\n🔍 [${horaInicio.toISOString()}] Verificação ${contadorPolling} iniciada`);
 
   try {
-    // 1. Verificação inicial da tabela
-    console.log('🔎 Verificando acesso básico à tabela cobrancas...');
-    const { data: amostra, error: erroAmostra } = await supabase
-      .from('cobrancas')
-      .select('txid, created_at', { count: 'exact' })
-      .limit(1);
-
-    console.log('📊 Dados de amostra da tabela:', {
-      total_registros: amostra?.length,
-      primeiro_registro: amostra?.[0],
-      erro: erroAmostra?.message
-    });
-
-    if (erroAmostra) throw erroAmostra;
-    if (!amostra || amostra.length === 0) {
-      console.log('ℹ️ A tabela cobrancas está vazia');
-      return;
-    }
-
-    // 2. Consulta diagnóstica detalhada
-    console.log('\n🔍 Executando consulta diagnóstica...');
+    // 1. Diagnóstico completo da tabela
+    console.log('\n🔍 Analisando estado atual das cobranças...');
     const { data: diagnostico } = await supabase
       .from('cobrancas')
-      .select('txid, status, mensagem_enviada, created_at, telefone_cliente')
-      .order('created_at', { ascending: false })
-      .limit(5);
+      .select('status, mensagem_enviada, count(*)', { count: 'exact' })
+      .group('status, mensagem_enviada');
 
-    console.log('📋 Últimas 5 cobranças no banco (DIAGNÓSTICO COMPLETO):');
-    diagnostico.forEach((cob, i) => {
-      console.log(`  ${i + 1}. TXID: ${cob.txid}`, {
-        status: cob.status,
-        mensagem_enviada: cob.mensagem_enviada,
-        created_at: cob.created_at,
-        telefone: cob.telefone_cliente,
-        telefone_formatado: cob.telefone_cliente ? `55${String(cob.telefone_cliente).replace(/\D/g, '')}@s.whatsapp.net` : 'INVÁLIDO'
-      });
-    });
+    console.log('📊 Distribuição de cobranças:', diagnostico);
 
-    // 3. Consulta principal com filtros
-    const filtroData = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    console.log('\n🔍 Executando consulta principal com filtros:', {
-      status: ['concluido', 'Concluído', 'CONCLUIDO'],
-      mensagem_enviada: ['false', 'null'],
-      data_minima: filtroData,
-      ordenacao: 'created_at DESC',
-      limite: 10
-    });
-
+    // 2. Consulta principal adaptada à realidade dos dados
     const { data: cobrancas, error, count } = await supabase
       .from('cobrancas')
       .select('*', { count: 'exact' })
-      .or('status.eq.concluido,status.eq.Concluído,status.eq.CONCLUIDO')
+      // Adaptado para incluir status "PENDENTE" se necessário
+      .or('status.eq.concluido,status.eq.Concluído,status.eq.CONCLUIDO,status.eq.PENDENTE')
       .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
-      .not('created_at', 'is', null)
-      .gt('created_at', filtroData)
-      .order('created_at', { ascending: false })
+      // Ordena por data (tratando NULL como mais antigos) ou por ID
+      .order('coalesce(created_at, timestamp \'1970-01-01\')', { ascending: false })
       .limit(10);
 
-    console.log('\n📊 Resultado da consulta principal:', {
-      total_cobrancas: count,
+    console.log('\n📊 Resultado da consulta adaptada:', {
+      total_encontrado: count,
       cobrancas_encontradas: cobrancas?.length,
-      tempo_execucao: `${(new Date() - horaInicio)}ms`,
+      status_distintos: [...new Set(cobrancas?.map(c => c.status))],
+      com_data: cobrancas?.filter(c => c.created_at).length,
+      sem_data: cobrancas?.filter(c => !c.created_at).length,
       erro: error?.message
     });
 
     if (error) throw error;
 
     if (cobrancas?.length > 0) {
-      console.log(`\n📦 ${cobrancas.length} cobrança(s) para processar:`);
+      console.log(`\n📦 Processando ${cobrancas.length} cobrança(s):`);
       
       for (const cobranca of cobrancas) {
         console.log('\n⚙️ ========== INÍCIO PROCESSAMENTO ==========');
-        console.log('📄 Dados completos da cobrança:', {
+        console.log('📄 Dados completos:', {
           txid: cobranca.txid,
           status: cobranca.status,
           valor: cobranca.valor,
-          telefone_original: cobranca.telefone_cliente,
-          created_at: cobranca.created_at,
+          telefone: cobranca.telefone_cliente || 'NÃO INFORMADO',
+          data: cobranca.created_at || 'SEM DATA',
           mensagem_enviada: cobranca.mensagem_enviada,
-          mensagem_erro: cobranca.mensagem_erro
+          dias_sem_notificar: cobranca.created_at 
+            ? Math.floor((new Date() - new Date(cobranca.created_at)) / (1000 * 60 * 60 * 24))
+            : 'DESCONHECIDO'
         });
 
         await processarCobranca(cobranca);
         console.log('✅ ========= FIM PROCESSAMENTO ==========\n');
       }
     } else {
-      console.log('\n⏭️ Nenhuma cobrança corresponde aos critérios atuais');
-      console.log('🔍 Comparação com critérios:', {
-        status_necessario: 'concluido/Concluído/CONCLUIDO',
-        mensagem_necessaria: 'false ou null',
-        data_minima: filtroData,
-        exemplos_status: [...new Set(diagnostico.map(d => d.status))],
-        exemplos_mensagem_enviada: [...new Set(diagnostico.map(d => d.mensagem_enviada))]
-      });
+      console.log('\n⏭️ Nenhuma cobrança elegível encontrada');
     }
 
   } catch (error) {
-    console.error('\n❌❌❌ ERRO CRÍTICO NO POLLING ❌❌❌', {
+    console.error('\n❌ ERRO CRÍTICO:', {
       mensagem: error.message,
       stack: error.stack,
-      detalhes: error.details,
       hora: new Date().toISOString()
     });
   } finally {
     console.log(`\n⏱️ Tempo total da verificação: ${(new Date() - horaInicio)}ms`);
-  }
-}
-
-async function processarCobranca(cobranca) {
-  const inicioProcessamento = new Date();
-  
-  try {
-    // 1. Validação e formatação do telefone
-    console.log('\n📱 Validando telefone...');
-    const telefoneLimpo = String(cobranca.telefone_cliente).replace(/\D/g, '');
-    console.log('Telefone transformado:', {
-      original: cobranca.telefone_cliente,
-      limpo: telefoneLimpo,
-      valido: telefoneLimpo.length >= 11
-    });
-
-    if (!telefoneLimpo || telefoneLimpo.length < 11) {
-      throw new Error(`Telefone inválido: ${cobranca.telefone_cliente}`);
-    }
-    
-    const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
-    console.log('Número formatado para WhatsApp:', numeroWhatsapp);
-
-    // 2. Formatação da mensagem
-    console.log('\n✉️ Formatando mensagem...');
-    const valorFormatado = cobranca.valor 
-      ? cobranca.valor.toFixed(2).replace('.', ',') 
-      : '0,00';
-    
-    const mensagem = cobranca.mensagem_confirmação || 
-      `✅ Cobrança #${cobranca.txid} confirmada!\n` +
-      `💵 Valor: R$${valorFormatado}\n` +
-      `📅 Data: ${new Date(cobranca.created_at).toLocaleDateString()}`;
-
-    console.log('Mensagem a ser enviada:', mensagem);
-
-    // 3. Envio da mensagem
-    console.log('\n📤 Enviando mensagem via WhatsApp...');
-    const inicioEnvio = new Date();
-    await sock.sendMessage(numeroWhatsapp, { text: mensagem });
-    console.log('✅ Mensagem enviada com sucesso', {
-      tempo_envio: `${(new Date() - inicioEnvio)}ms`
-    });
-
-    // 4. Atualização no banco de dados
-    console.log('\n💾 Atualizando status no Supabase...');
-    const { error } = await supabase
-      .from('cobrancas')
-      .update({ 
-        mensagem_enviada: true,
-        data_envio: new Date().toISOString()
-      })
-      .eq('txid', cobranca.txid);
-
-    if (error) throw error;
-    console.log('✔️ Status atualizado no banco de dados');
-
-  } catch (error) {
-    console.error('\n⚠️ ERRO NO PROCESSAMENTO:', {
-      txid: cobranca.txid,
-      mensagem: error.message,
-      stack: error.stack
-    });
-
-    // Tentativa de marcar como erro no banco
-    try {
-      console.log('\n🔄 Tentando registrar erro no banco...');
-      await supabase
-        .from('cobrancas')
-        .update({ 
-          mensagem_erro: error.message.substring(0, 255),
-          mensagem_enviada: true
-        })
-        .eq('txid', cobranca.txid);
-      console.log('✔️ Erro registrado no banco de dados');
-    } catch (dbError) {
-      console.error('❌ Falha ao registrar erro:', dbError.message);
-    }
-  } finally {
-    console.log(`⏱️ Tempo total do processamento: ${(new Date() - inicioProcessamento)}ms`);
   }
 }
 
