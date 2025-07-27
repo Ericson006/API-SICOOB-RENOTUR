@@ -158,27 +158,32 @@ function iniciarPollingCobrancas() {
 
 async function verificarCobrancasPendentes() {
   contadorPolling++;
-  console.log(`\n🔍 Verificação ${contadorPolling} iniciada...`);
+  console.log(`\n🔍 Verificação ${contadorPolling} iniciada em ${new Date().toISOString()}`);
 
   try {
-    let query = supabase
+    // 1. Primeiro verifica se a tabela tem registros
+    const { data: amostra, error: erroAm } = await supabase
       .from('cobrancas')
-      .select('*')
+      .select('txid, status, mensagem_enviada, created_at')
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    if (erroAm) throw erroAm;
+
+    console.log('📋 Amostra das últimas cobranças:', amostra);
+
+    // 2. Consulta principal modificada para lidar com NULL
+    const { data: cobrancas, error, count } = await supabase
+      .from('cobrancas')
+      .select('*', { count: 'exact' })
       .eq('status', 'concluido')
-      .eq('mensagem_enviada', false)
-      .order('created_at', { ascending: true })
-      .limit(10);
+      .or('mensagem_enviada.eq.false,mensagem_enviada.is.null') // Aceita false ou NULL
+      .order('created_at', { ascending: true });
 
-    if (ultimoTxidProcessado) {
-      // Como não temos um ID sequencial, usamos created_at para pegar registros mais recentes
-      query = query.gt('created_at', ultimoTxidProcessado);
-    }
-
-    const { data: cobrancas, error } = await query;
-
-    console.log('🔎 Resultado da consulta:', {
-      count: cobrancas?.length,
-      ultimoTxidProcessado,
+    console.log('🔍 Detalhes da consulta:', {
+      filtro_status: 'concluido',
+      filtro_mensagem: 'false ou null',
+      total_encontrado: count,
       error: error?.message
     });
 
@@ -186,31 +191,41 @@ async function verificarCobrancasPendentes() {
 
     if (cobrancas && cobrancas.length > 0) {
       console.log(`📦 ${cobrancas.length} cobrança(s) para processar`);
-      // Armazena a data da última cobrança processada
-      ultimoTxidProcessado = cobrancas[cobrancas.length - 1].created_at;
+      console.log('📄 Exemplo:', {
+        txid: cobrancas[0].txid,
+        status: cobrancas[0].status,
+        mensagem_enviada: cobrancas[0].mensagem_enviada,
+        created_at: cobrancas[0].created_at
+      });
       
       for (const cobranca of cobrancas) {
         await processarCobranca(cobranca);
       }
     } else {
-      console.log('⏭️ Nenhuma cobrança pendente encontrada');
-    }
-
-    if (contadorPolling % 5 === 0) {
-      const used = process.memoryUsage().heapUsed / 1024 / 1024;
-      console.log('📊 Status do Sistema:', {
-        memoria: `${Math.round(used * 100) / 100} MB`,
-        pollingCount: contadorPolling,
-        tempo: new Date().toLocaleTimeString(),
-        ultimoTxidProcessado
+      console.log('⏭️ Nenhuma cobrança pendente encontrada - Critérios:', {
+        status_deve_ser: 'concluido',
+        mensagem_enviada_deve_ser: 'false ou null'
       });
+      
+      // Verificação adicional
+      const { data: concluidas } = await supabase
+        .from('cobrancas')
+        .select('txid, status, mensagem_enviada')
+        .eq('status', 'concluido')
+        .limit(5);
+
+      console.log('ℹ️ Últimas cobranças concluídas:', concluidas);
     }
 
+    // ... (resto do código permanece igual)
   } catch (error) {
-    console.error('❌ Erro no polling:', error.message);
+    console.error('❌ Erro no polling:', {
+      message: error.message,
+      stack: error.stack,
+      details: error.details
+    });
   }
 }
-
 async function processarCobranca(cobranca) {
   try {
     console.log(`\n🔄 Processando cobrança TXID: ${cobranca.txid}...`);
