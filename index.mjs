@@ -234,6 +234,23 @@ async function verificarCobrancasPendentes() {
   }
 }
 
+function formatarDataBrasilComSegundos(dataOriginal) {
+  const options = {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+  
+  return new Date(dataOriginal).toLocaleString('pt-BR', options)
+    .replace(',', ' -');
+}
+// Saída: "28/07/2024 - 20:00:00"
+
 async function processarCobranca(cobranca) {
   const inicioProcessamento = new Date();
   
@@ -254,13 +271,14 @@ async function processarCobranca(cobranca) {
     const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
     console.log('Número formatado para WhatsApp:', numeroWhatsapp);
 
-    // 2. Formatação da mensagem (sem TXID e com data/hora correta)
+    // 2. Formatação da mensagem (com hora correta em Brasília)
     console.log('\n✉️ Formatando mensagem...');
     const valorFormatado = cobranca.valor 
       ? cobranca.valor.toFixed(2).replace('.', ',') 
       : '0,00';
 
     const dataFormatada = new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
