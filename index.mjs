@@ -161,32 +161,39 @@ async function verificarCobrancasPendentes() {
   console.log(`\n🔍 [${horaInicio.toISOString()}] Verificação ${contadorPolling} iniciada`);
 
   try {
-    // 1. Diagnóstico completo da tabela
+    // 1. Diagnóstico simplificado da tabela
     console.log('\n🔍 Analisando estado atual das cobranças...');
-    const { data: diagnostico } = await supabase
+    const { data: ultimasCobrancas } = await supabase
       .from('cobrancas')
-      .select('status, mensagem_enviada, count(*)', { count: 'exact' })
-      .group('status, mensagem_enviada');
+      .select('txid, status, created_at, mensagem_enviada')
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .limit(5);
 
-    console.log('📊 Distribuição de cobranças:', diagnostico);
+    console.log('📋 Últimas 5 cobranças no banco:');
+    ultimasCobrancas.forEach((cob, i) => {
+      console.log(`  ${i + 1}. ${cob.txid}`, {
+        status: cob.status,
+        mensagem_enviada: cob.mensagem_enviada,
+        created_at: cob.created_at || 'SEM DATA'
+      });
+    });
 
-    // 2. Consulta principal adaptada à realidade dos dados
+    // 2. Consulta principal otimizada
     const { data: cobrancas, error, count } = await supabase
       .from('cobrancas')
       .select('*', { count: 'exact' })
-      // Adaptado para incluir status "PENDENTE" se necessário
+      // Filtro por status (incluindo PENDENTE se necessário)
       .or('status.eq.concluido,status.eq.Concluído,status.eq.CONCLUIDO,status.eq.PENDENTE')
+      // Filtro por mensagem não enviada
       .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
-      // Ordena por data (tratando NULL como mais antigos) ou por ID
-      .order('coalesce(created_at, timestamp \'1970-01-01\')', { ascending: false })
+      // Ordenação por data (tratando NULL como antigos)
+      .order('created_at', { ascending: false })
       .limit(10);
 
-    console.log('\n📊 Resultado da consulta adaptada:', {
+    console.log('\n📊 Resultado da consulta:', {
       total_encontrado: count,
       cobrancas_encontradas: cobrancas?.length,
       status_distintos: [...new Set(cobrancas?.map(c => c.status))],
-      com_data: cobrancas?.filter(c => c.created_at).length,
-      sem_data: cobrancas?.filter(c => !c.created_at).length,
       erro: error?.message
     });
 
@@ -203,10 +210,7 @@ async function verificarCobrancasPendentes() {
           valor: cobranca.valor,
           telefone: cobranca.telefone_cliente || 'NÃO INFORMADO',
           data: cobranca.created_at || 'SEM DATA',
-          mensagem_enviada: cobranca.mensagem_enviada,
-          dias_sem_notificar: cobranca.created_at 
-            ? Math.floor((new Date() - new Date(cobranca.created_at)) / (1000 * 60 * 60 * 24))
-            : 'DESCONHECIDO'
+          mensagem_enviada: cobranca.mensagem_enviada
         });
 
         await processarCobranca(cobranca);
