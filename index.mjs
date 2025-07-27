@@ -161,47 +161,73 @@ async function verificarCobrancasPendentes() {
   console.log(`\n🔍 Verificação ${contadorPolling} iniciada em ${new Date().toISOString()}`);
 
   try {
-    // Consulta modificada para pegar as mais recentes primeiro
+    // ETAPA 1: Verificar conexão com a tabela
+    const { data: qualquerCobranca, error: erroGeral } = await supabase
+      .from('cobrancas')
+      .select('*')
+      .limit(1);
+
+    if (erroGeral) {
+      console.error('❌ Erro ao acessar tabela cobrancas:', erroGeral);
+      return;
+    }
+
+    if (!qualquerCobranca || qualquerCobranca.length === 0) {
+      console.log('ℹ️ Tabela cobrancas está vazia');
+      return;
+    }
+
+    // ETAPA 2: Verificar UMA cobrança concluída (ignorando mensagem_enviada)
+    const { data: concluidas, error: erroConcluidas } = await supabase
+      .from('cobrancas')
+      .select('txid, status, mensagem_enviada, created_at')
+      .eq('status', 'concluido')
+      .limit(1);
+
+    console.log('🔍 Cobranças concluídas encontradas:', concluidas);
+
+    // ETAPA 3: Verificar UMA cobrança não notificada (ignorando status)
+    const { data: naoNotificadas, error: erroNotificadas } = await supabase
+      .from('cobrancas')
+      .select('txid, status, mensagem_enviada, created_at')
+      .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
+      .limit(1);
+
+    console.log('🔍 Cobranças não notificadas encontradas:', naoNotificadas);
+
+    // ETAPA 4: Consulta original com DEBUG
     const { data: cobrancas, error, count } = await supabase
       .from('cobrancas')
       .select('*', { count: 'exact' })
       .eq('status', 'concluido')
       .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
-      .order('created_at', { ascending: false }) // Agora ordena do mais novo para o mais antigo
-      .limit(10);
+      .order('created_at', { ascending: false });
 
-    console.log('🔍 Detalhes da consulta:', {
-      ordenacao: 'created_at DESC',
+    console.log('🔍 Resultado FINAL:', {
+      query: "status='concluido' AND (mensagem_enviada=false OR mensagem_enviada IS NULL)",
       total_encontrado: count,
+      exemplo: cobrancas?.[0],
       error: error?.message
     });
 
     if (error) throw error;
 
-    if (cobrancas && cobrancas.length > 0) {
-      console.log(`📦 ${cobrancas.length} cobrança(s) para processar (das mais recentes)`);
-      console.log('📄 Exemplos:', {
-        mais_nova: {
-          txid: cobrancas[0].txid,
-          created_at: cobrancas[0].created_at
-        },
-        mais_antiga: {
-          txid: cobrancas[cobrancas.length-1].txid,
-          created_at: cobrancas[cobrancas.length-1].created_at
-        }
-      });
-      
+    if (cobrancas?.length > 0) {
+      console.log(`📦 Processando ${cobrancas.length} cobrança(s)`);
       for (const cobranca of cobrancas) {
         await processarCobranca(cobranca);
       }
     } else {
-      console.log('⏭️ Nenhuma cobrança pendente encontrada');
+      console.log('⏭️ Nenhuma cobrança corresponde EXATAMENTE aos critérios');
     }
 
-    // ... (resto do código permanece igual)
   } catch (error) {
-    console.error('❌ Erro no polling:', error.message);
+    console.error('❌ Erro grave no polling:', {
+      message: error.message,
+      stack: error.stack
+    });
   }
+}
 }
 async function processarCobranca(cobranca) {
   try {
