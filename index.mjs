@@ -101,7 +101,6 @@ async function startBot() {
     sock = makeWASocket({
       auth: state,
       version,
-      printQRInTerminal: true,
       browser: ["Renotur", "Bot", "1.0"],
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
@@ -116,13 +115,13 @@ async function startBot() {
       if (qr) {
         ultimoQR = qr;
         console.log('🆕 Novo QR Code gerado');
-        QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
-          if (!err) console.log(url);
         });
       }
 
       if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
+        const statusCode = lastDisconnect?.error?.output?.statusCode 
+        lastDisconnect?.error?.status 
+        lastDisconnect?.error?.code;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
         console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
@@ -262,7 +261,7 @@ async function processarCobranca(cobranca) {
 
     console.log('\n✉️ Enviando mensagem...');
     const valorFormatado = cobranca.valor.toFixed(2).replace('.', ',');
-    const mensagem = cobranca.mensagem_confirmação || 
+    const mensagem = cobranca.mensagem_confirmacao || 
       `✅ Pagamento confirmado!\n💵 Valor: R$${valorFormatado}\n📅 Data: ${new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR')}`;
 
     await sock.sendMessage(numeroWhatsapp, { text: mensagem });
