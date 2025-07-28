@@ -99,13 +99,13 @@ async function startBot() {
 
     sock = makeWASocket({
       auth: state,
+      version,
       printQRInTerminal: true,
-      version, // ✅ Versão dinâmica
       browser: ["Renotur", "Bot", "1.0"],
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
       keepAliveIntervalMs: 10_000,
-      logger: { level: 'warn' }
+      logger: pino({ level: 'warn' }) // ✅ CORRETO AGORA
     });
     sock.ev.on('creds.update', saveCreds);
 
