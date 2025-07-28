@@ -95,11 +95,14 @@ async function startBot() {
     if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    
+
+    // 🔥 Obtém automaticamente a versão correta do WhatsApp Web
+    const { version } = await fetchLatestBaileysVersion();
+
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: true,
-      version, // 👈 Usa a versão automática em vez do array fixo
+      version, // ✅ Usa versão dinâmica
       browser: ["Renotur", "Bot", "1.0"],
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
