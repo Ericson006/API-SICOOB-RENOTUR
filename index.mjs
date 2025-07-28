@@ -155,6 +155,27 @@ function iniciarPollingCobrancas() {
   verificarCobrancasPendentes();
   pollingInterval = setInterval(verificarCobrancasPendentes, 20000);
 }
+
+// Adicione esta função no início do seu arquivo (antes de processarCobranca)
+function formatarDataBrasilComSegundos(dataOriginal) {
+  const data = new Date(dataOriginal || new Date());
+  const options = {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+  
+  return data.toLocaleString('pt-BR', options)
+    .replace(',', ' -')
+    .replace(/\//g, '/');
+}
+
+
 async function verificarCobrancasPendentes() {
   contadorPolling++;
   const horaInicio = new Date();
@@ -244,11 +265,11 @@ async function processarCobranca(cobranca) {
   const inicioProcessamento = new Date();
   
   try {
-    // 1. Validação EXTRA do telefone
+    // 1. Validação do telefone
     console.log('\n📱 Validando telefone...');
     let telefoneLimpo = String(cobranca.telefone_cliente)
       .replace(/\D/g, '')
-      .replace(/[\u202A-\u202E]/g, ''); // Remove caracteres invisíveis
+      .replace(/[\u202A-\u202E]/g, '');
 
     // Correção para DDD 11 sem nono dígito
     if (telefoneLimpo.length === 10 && telefoneLimpo.startsWith('11')) {
@@ -261,14 +282,14 @@ async function processarCobranca(cobranca) {
     
     const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
 
-    // 2. Verificação REAL no WhatsApp
+    // 2. Verificação no WhatsApp
     console.log('\n🔍 Verificando existência do número...');
     const [resultado] = await sock.onWhatsApp(numeroWhatsapp);
     if (!resultado?.exists) {
       throw new Error(`Número não registrado no WhatsApp: ${telefoneLimpo}`);
     }
 
-    // 3. Formatação da mensagem COM SEGUNDOS
+    // 3. Formatação da mensagem
     console.log('\n✉️ Formatando mensagem...');
     const valorFormatado = cobranca.valor.toFixed(2).replace('.', ',');
     const mensagem = cobranca.mensagem_confirmação || 
@@ -276,41 +297,37 @@ async function processarCobranca(cobranca) {
       `💵 Valor: R$${valorFormatado}\n` +
       `📅 Data: ${formatarDataBrasilComSegundos(cobranca.created_at)}`;
 
-    // 4. Pré-aquecimento nuclear
-    await prepararEnvioWhatsApp(numeroWhatsapp);
-
-    // 5. Envio à prova de falhas
+    // 4. Envio da mensagem
     console.log('\n🚀 Enviando mensagem...');
-    const enviado = await enviarMensagemConfiavel(numeroWhatsapp, mensagem);
-    if (!enviado) throw new Error('Falha em todos os métodos de envio');
+    await sock.sendMessage(numeroWhatsapp, { text: mensagem });
 
-    // 6. Atualização no banco de dados (APENAS mensagem_enviada boolean)
+    // 5. Atualização no banco
     console.log('\n💾 Atualizando status no Supabase...');
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: true, // Campo boolean existente
-        data_envio: new Date().toISOString() // Mantém o timestamp
+        mensagem_enviada: true,
+        data_envio: new Date().toISOString()
       })
       .eq('txid', cobranca.txid);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
     console.log('✔️ Banco de dados atualizado');
 
-    // Atualiza o último TXID processado
     ultimoTxidProcessado = cobranca.txid;
 
   } catch (error) {
     console.error('\n⚠️ ERRO NO PROCESSAMENTO:', error.message);
     
-    // Registro de erro (usando apenas campos existentes)
-    await supabase
+    // Atualização de erro no banco
+    const { error: updateError } = await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: false // Apenas isso (boolean)
+        mensagem_enviada: false
       })
-      .eq('txid', cobranca.txid)
-      .catch(e => console.error('Falha ao atualizar status:', e));
+      .eq('txid', cobranca.txid);
+
+    if (updateError) console.error('Falha ao registrar erro:', updateError);
   } finally {
     console.log(`⏱️ Tempo total: ${(new Date() - inicioProcessamento)}ms`);
   }
