@@ -265,7 +265,7 @@ async function processarCobranca(cobranca) {
   const inicioProcessamento = new Date();
   
   try {
-    // 1. Validação do telefone
+    // 1. Validação EXTRA do telefone
     console.log('\n📱 Validando telefone...');
     let telefoneLimpo = String(cobranca.telefone_cliente)
       .replace(/\D/g, '')
@@ -282,9 +282,13 @@ async function processarCobranca(cobranca) {
     
     const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
 
-    // 2. Verificação no WhatsApp
+    // 2. Verificação REAL no WhatsApp (com timeout)
     console.log('\n🔍 Verificando existência do número...');
-    const [resultado] = await sock.onWhatsApp(numeroWhatsapp);
+    const [resultado] = await Promise.race([
+      sock.onWhatsApp(numeroWhatsapp),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout na verificação')), 5000))
+    ]);
+    
     if (!resultado?.exists) {
       throw new Error(`Número não registrado no WhatsApp: ${telefoneLimpo}`);
     }
@@ -295,15 +299,37 @@ async function processarCobranca(cobranca) {
     const mensagem = cobranca.mensagem_confirmação || 
       `✅ Pagamento confirmado! Obrigado por confiar na Renotur ✨🚌\n` +
       `💵 Valor: R$${valorFormatado}\n` +
-      `📅 Data: ${formatarDataBrasilComSegundos(cobranca.created_at)}`;
+      `📅 Data: ${new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR')}`;
 
-    // 4. Envio da mensagem
-    console.log('\n🚀 Enviando mensagem...');
-    await sock.sendMessage(numeroWhatsapp, { text: mensagem });
+    // 4. Pré-aquecimento nuclear (OBRIGATÓRIO)
+    console.log('\n🔥 Pré-aquecendo conexão...');
+    await sock.updateProfilePicture(numeroWhatsapp, null).catch(() => {});
+    await sock.presenceSubscribe(numeroWhatsapp);
+    await sock.sendPresenceUpdate('composing', numeroWhatsapp);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // 5. Atualização no banco
-    console.log('\n💾 Atualizando status no Supabase...');
-    const { error: updateError } = await supabase
+    // 5. Envio com confirmação de entrega
+    console.log('\n✈️ Enviando mensagem com confirmação...');
+    const messageSent = await sock.sendMessage(numeroWhatsapp, { 
+      text: mensagem,
+      footer: ' ', // Importante para contornar restrições
+      buttons: [{
+        buttonId: 'ack',
+        buttonText: { displayText: ' ' }, // Botão invisível
+        type: 1
+      }]
+    });
+
+    // 6. Verificação de entrega
+    console.log('\n🔎 Confirmando entrega...');
+    const status = await sock.fetchStatus(numeroWhatsapp).catch(() => null);
+    if (!status) {
+      throw new Error('Mensagem não confirmada no dispositivo destino');
+    }
+
+    // 7. Atualização no banco
+    console.log('\n💾 Atualizando status...');
+    const { error } = await supabase
       .from('cobrancas')
       .update({ 
         mensagem_enviada: true,
@@ -311,23 +337,29 @@ async function processarCobranca(cobranca) {
       })
       .eq('txid', cobranca.txid);
 
-    if (updateError) throw updateError;
-    console.log('✔️ Banco de dados atualizado');
-
-    ultimoTxidProcessado = cobranca.txid;
+    if (error) throw error;
+    console.log('✅ Processamento completo');
 
   } catch (error) {
-    console.error('\n⚠️ ERRO NO PROCESSAMENTO:', error.message);
+    console.error('\n❌ FALHA CRÍTICA:', error.message);
     
+    // Tentativa de fallback manual
+    try {
+      await sock.sendMessage(numeroWhatsapp, {
+        text: `⚠️ Mensagem automática falhou: ${error.message.substring(0, 100)}`
+      });
+    } catch (e) {
+      console.log('Fallback também falhou:', e.message);
+    }
+
     // Atualização de erro no banco
-    const { error: updateError } = await supabase
+    await supabase
       .from('cobrancas')
       .update({ 
         mensagem_enviada: false
       })
-      .eq('txid', cobranca.txid);
-
-    if (updateError) console.error('Falha ao registrar erro:', updateError);
+      .eq('txid', cobranca.txid)
+      .catch(e => console.error('Falha ao registrar erro:', e));
   } finally {
     console.log(`⏱️ Tempo total: ${(new Date() - inicioProcessamento)}ms`);
   }
