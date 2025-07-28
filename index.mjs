@@ -110,17 +110,19 @@ async function startBot() {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
+    try {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
         ultimoQR = qr;
         console.log('🆕 Novo QR Code gerado');
-        }
-      });
+        QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
+          if (!err) console.log(url);
+        });
+      }
+
       if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode 
-        lastDisconnect?.error?.status 
-        lastDisconnect?.error?.code;
+        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
         console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
@@ -128,14 +130,17 @@ async function startBot() {
         if (shouldReconnect && !reconectando) {
           reconectando = true;
           setTimeout(() => {
-            startBot().then(() => reconectando = false);
+            startBot().then(() => (reconectando = false));
           }, 10000);
         }
       } else if (connection === 'open') {
         console.log('✅ Conectado ao WhatsApp!');
         iniciarPollingCobrancas();
       }
-    });
+    } catch (err) {
+      console.error('Erro no connection.update:', err.message);
+    }
+  });
 
     return sock;
   } catch (error) {
