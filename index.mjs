@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
+import pino from 'pino';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
