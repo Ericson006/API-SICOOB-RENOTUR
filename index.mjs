@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 
 // Configuração de paths
@@ -109,44 +109,6 @@ async function startBot() {
       keepAliveIntervalMs: 10_000,
       logger: { level: 'warn' }
     });
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      if (qr) {
-        ultimoQR = qr;
-        console.log('🆕 Novo QR Code gerado');
-        QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
-          if (!err) console.log(url);
-        });
-      }
-
-      if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
-
-        if (shouldReconnect && !reconectando) {
-          reconectando = true;
-          setTimeout(() => {
-            startBot().then(() => reconectando = false);
-          }, 10000);
-        }
-      } else if (connection === 'open') {
-        console.log('✅ Conectado ao WhatsApp!');
-        iniciarPollingCobrancas();
-      }
-    });
-
-    return sock;
-  } catch (error) {
-    console.error('🚨 Erro ao iniciar bot:', error);
-    setTimeout(startBot, 15000);
-    throw error;
-  }
-}
 
 // ==============================================
 // SISTEMA DE POLLING ATUALIZADO PARA USAR TXID
