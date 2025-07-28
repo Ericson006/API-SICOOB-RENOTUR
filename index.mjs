@@ -99,10 +99,20 @@ async function startBot() {
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: true,
-      getMessage: async () => ({}),
       syncFullHistory: false,
       shouldIgnoreJid: () => false,
-      connectTimeoutMs: 30000
+      connectTimeoutMs: 30000,
+      // Novos parâmetros críticos:
+      markOnlineOnConnect: true,
+      browser: ["Renotur", "Bot", "1.0"],
+      getMessage: async () => ({ conversation: 'SYNC' }),
+      // Adicione para melhor estabilidade:
+      emitOwnEvents: true,
+      defaultQueryTimeoutMs: 60000,
+      transactionOpts: {
+        maxCommitRetries: 10,
+        delayBetweenTriesMs: 3000
+      }
     });
 
     sock.ev.on('creds.update', saveCreds);
