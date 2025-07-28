@@ -96,8 +96,6 @@ async function startBot() {
     if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-
-    const { version } = await fetchLatestBaileysVersion();
     
     sock = makeWASocket({
       auth: state,
