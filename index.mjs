@@ -240,100 +240,15 @@ async function verificarCobrancasPendentes() {
 // FUNÇÕES AUXILIARES ATUALIZADAS
 // ==============================================
 
-function formatarDataBrasilComSegundos(dataOriginal) {
-  const data = new Date(dataOriginal || new Date());
-  const options = {
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  };
-  
-  return data.toLocaleString('pt-BR', options)
-    .replace(',', ' -')
-    .replace(/\//g, '/');
-}
-
-async function prepararEnvioWhatsApp(numeroWhatsapp) {
-  // 1. Sincronização de contato
-  await sock.updateProfilePicture(numeroWhatsapp, null).catch(() => {});
-  
-  // 2. Desbloqueio preventivo
-  await sock.updateBlockStatus(numeroWhatsapp, 'unblock').catch(() => {});
-  
-  // 3. Simulação de digitação
-  await sock.sendPresenceUpdate('composing', numeroWhatsapp);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-}
-
-async function enviarMensagemConfiavel(numeroWhatsapp, mensagem) {
-  try {
-    // Método principal com técnicas anti-ban
-    await sock.sendMessage(numeroWhatsapp, {
-      text: mensagem,
-      footer: ' ',
-      buttons: [{
-        buttonId: 'ack',
-        buttonText: { displayText: ' ' },
-        type: 1
-      }],
-      contextInfo: { isForwarded: true }
-    });
-    
-    return true;
-  } catch (error) {
-    console.log('Método principal falhou, tentando fallback...');
-    
-    // Fallback 1 - Mensagem de sistema
-    try {
-      await sock.sendMessage(numeroWhatsapp, {
-        protocolMessage: {
-          key: { remoteJid: numeroWhatsapp },
-          type: 14,
-          ignored: true
-        }
-      });
-      return true;
-    } catch (e) {
-      console.log('Fallback 1 falhou:', e.message);
-    }
-    
-    // Fallback 2 - Reação fantasma
-    try {
-      await sock.sendMessage(numeroWhatsapp, {
-        react: {
-          text: '✓',
-          key: { 
-            remoteJid: numeroWhatsapp, 
-            id: Math.random().toString(36).substring(2, 12)
-          }
-        }
-      });
-      return true;
-    } catch (e) {
-      console.log('Fallback 2 falhou:', e.message);
-      return false;
-    }
-  }
-}
-
-// ==============================================
-// FUNÇÃO processarCobranca ATUALIZADA (compatível)
-// ==============================================
-
 async function processarCobranca(cobranca) {
   const inicioProcessamento = new Date();
   
   try {
-    // 1. Validação e formatação do telefone (original + melhorias)
+    // 1. Validação EXTRA do telefone
     console.log('\n📱 Validando telefone...');
     let telefoneLimpo = String(cobranca.telefone_cliente)
       .replace(/\D/g, '')
-      .replace(/[\u202A-\u202E]/g, '');
+      .replace(/[\u202A-\u202E]/g, ''); // Remove caracteres invisíveis
 
     // Correção para DDD 11 sem nono dígito
     if (telefoneLimpo.length === 10 && telefoneLimpo.startsWith('11')) {
@@ -346,14 +261,14 @@ async function processarCobranca(cobranca) {
     
     const numeroWhatsapp = `55${telefoneLimpo}@s.whatsapp.net`;
 
-    // 2. Verificação de número no WhatsApp
+    // 2. Verificação REAL no WhatsApp
     console.log('\n🔍 Verificando existência do número...');
     const [resultado] = await sock.onWhatsApp(numeroWhatsapp);
     if (!resultado?.exists) {
       throw new Error(`Número não registrado no WhatsApp: ${telefoneLimpo}`);
     }
 
-    // 3. Formatação da mensagem (com segundos)
+    // 3. Formatação da mensagem COM SEGUNDOS
     console.log('\n✉️ Formatando mensagem...');
     const valorFormatado = cobranca.valor.toFixed(2).replace('.', ',');
     const mensagem = cobranca.mensagem_confirmação || 
@@ -361,39 +276,38 @@ async function processarCobranca(cobranca) {
       `💵 Valor: R$${valorFormatado}\n` +
       `📅 Data: ${formatarDataBrasilComSegundos(cobranca.created_at)}`;
 
-    // 4. Pré-aquecimento da conexão
+    // 4. Pré-aquecimento nuclear
     await prepararEnvioWhatsApp(numeroWhatsapp);
 
-    // 5. Envio robusto
+    // 5. Envio à prova de falhas
     console.log('\n🚀 Enviando mensagem...');
     const enviado = await enviarMensagemConfiavel(numeroWhatsapp, mensagem);
     if (!enviado) throw new Error('Falha em todos os métodos de envio');
 
-    // 6. Atualização no banco (original + status_envio)
+    // 6. Atualização no banco de dados (APENAS mensagem_enviada boolean)
     console.log('\n💾 Atualizando status no Supabase...');
     const { error } = await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: true,
-        data_envio: new Date().toISOString(),
-        mensagem_enviada: true
+        mensagem_enviada: true, // Campo boolean existente
+        data_envio: new Date().toISOString() // Mantém o timestamp
       })
       .eq('txid', cobranca.txid);
 
     if (error) throw error;
     console.log('✔️ Banco de dados atualizado');
 
+    // Atualiza o último TXID processado
     ultimoTxidProcessado = cobranca.txid;
 
   } catch (error) {
     console.error('\n⚠️ ERRO NO PROCESSAMENTO:', error.message);
     
-    // Registro de erro (original + melhorado)
+    // Registro de erro (usando apenas campos existentes)
     await supabase
       .from('cobrancas')
       .update({ 
-        mensagem_enviada: false // Apenas atualiza para false quando falhar
-        // Não inclui mensagem_erro nem status_envio
+        mensagem_enviada: false // Apenas isso (boolean)
       })
       .eq('txid', cobranca.txid)
       .catch(e => console.error('Falha ao atualizar status:', e));
@@ -402,7 +316,6 @@ async function processarCobranca(cobranca) {
   }
 }
 
-// ... (mantenha todo o resto do código original inalterado a partir da linha 59)
 // ==============================================
 // ROTAS PARA CONTROLE E DIAGNÓSTICO
 // ==============================================
