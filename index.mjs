@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
-import makeWASocket from '@whiskeysockets/baileys/lib/Socket';  // Caminho específico da v5
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 
 // Configuração de paths
@@ -97,14 +97,16 @@ async function startBot() {
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
+    const { version } = await fetchLatestBaileysVersion();
+    
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: true,
-      version: [2, 2413, 1],
+      version, // 👈 Usa a versão automática em vez do array fixo
       browser: ["Renotur", "Bot", "1.0"],
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
-      keepAliveIntervalMs: 10_000, // 👈 Adicionada essa linha
+      keepAliveIntervalMs: 10_000,
       logger: { level: 'warn' }
     });
     sock.ev.on('creds.update', saveCreds);
