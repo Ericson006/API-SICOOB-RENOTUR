@@ -115,7 +115,7 @@ async function startBot() {
       if (qr) {
         ultimoQR = qr;
         console.log('🆕 Novo QR Code gerado');
-        });
+        };
       }
 
       if (connection === 'close') {
