@@ -104,6 +104,7 @@ async function startBot() {
       browser: ["Renotur", "Bot", "1.0"],
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
+      keepAliveIntervalMs: 10_000, // 👈 Adicionada essa linha
       logger: { level: 'warn' }
     });
     sock.ev.on('creds.update', saveCreds);
@@ -301,13 +302,6 @@ async function processarCobranca(cobranca) {
       `✅ Pagamento confirmado! Obrigado por confiar na Renotur ✨🚌\n` +
       `💵 Valor: R$${valorFormatado}\n` +
       `📅 Data: ${new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR')}`;
-
-    // 4. Pré-aquecimento nuclear (OBRIGATÓRIO)
-    console.log('\n🔥 Pré-aquecendo conexão...');
-    await sock.updateProfilePicture(numeroWhatsapp, null).catch(() => {});
-    await sock.presenceSubscribe(numeroWhatsapp);
-    await sock.sendPresenceUpdate('composing', numeroWhatsapp);
-    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // 5. Envio com confirmação de entrega
     console.log('\n✈️ Enviando mensagem com confirmação...');
