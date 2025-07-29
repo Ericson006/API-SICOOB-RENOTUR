@@ -1,12 +1,18 @@
+// Módulos nativos do Node
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs/promises';
+
+// Módulos de terceiros
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { Client, LocalAuth } from 'whatsapp-web.js';
 import QRCode from 'qrcode';
 import pino from 'pino';
+
+// Importação correta do whatsapp-web.js (CommonJS)
+import whatsappPkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = whatsappPkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -30,10 +36,16 @@ const supabase = createClient(
   }
 );
 
-// Configurações otimizadas para baixo consumo de RAM
+// Configurações
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
-const logger = pino({ level: 'warn' });
+const logger = pino({ 
+  level: 'warn',
+  transport: {
+    target: 'pino-pretty',
+    options: { colorize: true }
+  }
+});
 
 // Variáveis globais
 let ultimoQR = null;
@@ -41,7 +53,6 @@ let client = null;
 let reconectando = false;
 let pollingInterval = null;
 let contadorPolling = 0;
-let ultimoTxidProcessado = null;
 
 // Configuração do Express
 const app = express();
@@ -49,7 +60,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ==============================================
-// FUNÇÕES PRINCIPAIS (OTIMIZADAS)
+// FUNÇÕES PRINCIPAIS
 // ==============================================
 
 async function baixarAuthDoSupabase() {
@@ -80,28 +91,35 @@ async function baixarAuthDoSupabase() {
   }
 }
 
-async function sendMessageWithRetry(chatId, content, options = {}) {
-  const MAX_RETRIES = 2;
+async function sendMessageWithRetry(chatId, content) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const message = await client.sendMessage(chatId, content, options);
+      const message = await client.sendMessage(chatId, content);
       logger.info('Mensagem enviada para %s', chatId);
       return message;
     } catch (error) {
-      if (attempt === MAX_RETRIES) throw error;
-      await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      if (attempt === MAX_RETRIES) {
+        logger.error('Falha ao enviar mensagem após %d tentativas: %s', MAX_RETRIES, error.message);
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
     }
   }
 }
 
 // ==============================================
-// INICIALIZAÇÃO DO WHATSAPP-WEB.JS
+// INICIALIZAÇÃO DO WHATSAPP
 // ==============================================
 
 function startBot() {
   client = new Client({
-    authStrategy: new LocalAuth({ clientId: "bot", dataPath: authFolder }),
+    authStrategy: new LocalAuth({ 
+      clientId: "bot",
+      dataPath: authFolder
+    }),
     puppeteer: {
       headless: true,
       args: [
@@ -117,7 +135,7 @@ function startBot() {
     }
   });
 
-  client.on('qr', async qr => {
+  client.on('qr', qr => {
     ultimoQR = qr;
     logger.info('QR Code gerado');
     QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
@@ -145,7 +163,7 @@ function startBot() {
 }
 
 // ==============================================
-// SISTEMA DE POLLING (MANTIDO COM AJUSTES)
+// SISTEMA DE POLLING
 // ==============================================
 
 function iniciarPollingCobrancas() {
@@ -173,6 +191,7 @@ async function verificarCobrancasPendentes() {
     if (error) throw error;
 
     if (cobrancas?.length > 0) {
+      logger.info('Processando %d cobranças', cobrancas.length);
       for (const cobranca of cobrancas) {
         await processarCobranca(cobranca);
       }
@@ -187,49 +206,74 @@ async function verificarCobrancasPendentes() {
 async function processarCobranca(cobranca) {
   try {
     let telefone = String(cobranca.telefone_cliente).replace(/\D/g, '');
+    
+    // Ajuste para números de SP com 10 dígitos
     if (telefone.length === 10 && telefone.startsWith('11')) {
       telefone = telefone.substring(0, 2) + '9' + telefone.substring(2);
+    }
+    
+    if (telefone.length < 11) {
+      throw new Error(`Telefone inválido: ${telefone}`);
     }
     
     const chatId = `55${telefone}@c.us`;
     const valorFormatado = cobranca.valor.toFixed(2).replace('.', ',');
     const mensagem = cobranca.mensagem_confirmacao || 
-      `✅ Pagamento confirmado!\n💵 Valor: R$${valorFormatado}`;
+      `✅ Pagamento confirmado!\n💵 Valor: R$${valorFormatado}\n📅 Data: ${new Date().toLocaleString('pt-BR')}`;
 
     await sendMessageWithRetry(chatId, mensagem);
 
     await supabase.from('cobrancas')
       .update({ 
         mensagem_enviada: true,
-        data_envio: new Date().toISOString()
+        data_envio: new Date().toISOString(),
+        ultima_atualizacao: new Date().toISOString()
       })
       .eq('txid', cobranca.txid);
+
+    logger.info('Cobrança %s processada com sucesso', cobranca.txid);
   } catch (error) {
     logger.error('Erro ao processar cobrança: %s', error.message);
+    
+    await supabase.from('cobrancas')
+      .update({ 
+        erro_envio: error.message.substring(0, 255),
+        ultima_atualizacao: new Date().toISOString()
+      })
+      .eq('txid', cobranca.txid);
   }
 }
 
 // ==============================================
-// ROTAS EXPRESS (SIMPLIFICADAS)
+// ROTAS HTTP
 // ==============================================
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.get('/qr', (req, res) => {
-  if (!ultimoQR) return res.status(404).send('QR não disponível');
+  if (!ultimoQR) return res.status(404).json({ error: 'QR não disponível' });
   res.json({ qr: ultimoQR });
 });
 
 app.get('/', async (req, res) => {
   try {
     if (!ultimoQR) return res.status(404).send('QR não disponível');
+    
     const qrImage = await QRCode.toDataURL(ultimoQR);
     res.send(`
       <html>
-        <head><title>WhatsApp Bot</title></head>
-        <body style="text-align:center;">
+        <head>
+          <title>WhatsApp Bot</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+            img { max-width: 100%; height: auto; }
+          </style>
+        </head>
+        <body>
           <h1>📲 Conecte o WhatsApp</h1>
-          <img src="${qrImage}" width="300" />
+          <img src="${qrImage}" alt="QR Code" />
+          <p>Status: ${client?.info ? '✅ Conectado' : '❌ Aguardando conexão'}</p>
         </body>
       </html>
     `);
@@ -239,7 +283,7 @@ app.get('/', async (req, res) => {
 });
 
 // ==============================================
-// INICIALIZAÇÃO DO SERVIDOR
+// INICIALIZAÇÃO
 // ==============================================
 
 app.listen(PORT, () => {
@@ -248,15 +292,29 @@ app.listen(PORT, () => {
   // Monitor de memória
   setInterval(() => {
     const used = process.memoryUsage().heapUsed / 1024 / 1024;
-    if (used > 400) logger.warn('ALERTA: Uso de memória: %.2fMB', used);
+    logger.info('Uso de memória: %.2fMB', used);
+    
+    if (used > 450) {
+      logger.warn('⚠️ ALERTA: Uso alto de memória!');
+    }
   }, 60000);
 
   // Inicia o bot
-  baixarAuthDoSupabase().then(() => startBot());
+  baixarAuthDoSupabase()
+    .then(() => startBot())
+    .catch(err => logger.error('Erro ao iniciar bot: %s', err.message));
 });
 
-process.on('SIGINT', () => {
+// Gerenciamento de desligamento
+process.on('SIGINT', async () => {
   logger.info('Desligando...');
-  if (client) client.destroy();
+  
+  if (pollingInterval) clearInterval(pollingInterval);
+  
+  if (client) {
+    await client.destroy();
+    logger.info('Conexão com WhatsApp encerrada');
+  }
+  
   process.exit(0);
 });
