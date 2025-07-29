@@ -9,10 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import QRCode from 'qrcode';
 import pino from 'pino';
-
-// Importação correta do whatsapp-web.js (CommonJS)
-import whatsappPkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = whatsappPkg;
+import { Client, LocalAuth } from 'whatsapp-web.js';
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
@@ -39,7 +36,8 @@ const supabase = createClient(
 // Configurações
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
-// Configuração SIMPLIFICADA do logger (remova a configuração de transport)
+
+// Configuração do logger
 const logger = pino({
   level: 'info',
   formatters: {
@@ -116,28 +114,28 @@ async function sendMessageWithRetry(chatId, content) {
 // ==============================================
 
 function startBot() {
-  const client = new Client({
-  authStrategy: new LocalAuth({ 
-    clientId: "bot",
-    dataPath: authFolder
-  }),
-  puppeteer: { 
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--single-process'
-    ],
-    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser'
-  },
-  webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
-  }
-});
+  client = new Client({
+    authStrategy: new LocalAuth({ 
+      clientId: "bot",
+      dataPath: authFolder
+    }),
+    puppeteer: { 
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--single-process'
+      ],
+      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser'
+    },
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+    }
+  });
 
-  client.on('qr', qr => {
+  client.on('qr', (qr) => {
     ultimoQR = qr;
     logger.info('QR Code gerado');
     QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
