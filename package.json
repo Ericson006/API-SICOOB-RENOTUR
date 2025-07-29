@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node --optimize-for-size --max-old-space-size=480 index.js",
     "clean": "rm -rf auth sessions && mkdir auth sessions"
+    "postinstall": "echo 'Skipping Chromium install'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
