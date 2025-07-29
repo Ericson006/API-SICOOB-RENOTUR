@@ -39,12 +39,13 @@ const supabase = createClient(
 // Configurações
 const authFolder = `${__dirname}/auth`;
 const bucket = 'auth-session';
-const logger = pino({ 
-  level: 'warn',
-  transport: {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
+// Configuração SIMPLIFICADA do logger (remova a configuração de transport)
+const logger = pino({
+  level: 'info',
+  formatters: {
+    level: (label) => ({ level: label })
+  },
+  timestamp: () => `,"time":"${new Date().toISOString()}"`
 });
 
 // Variáveis globais
