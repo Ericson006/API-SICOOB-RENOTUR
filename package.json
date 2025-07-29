@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node --optimize-for-size --max-old-space-size=480 index.mjs",
+    "start": "node --optimize-for-size --max-old-space-size=480 index.js",
     "clean": "rm -rf auth sessions && mkdir auth sessions"
   },
   "dependencies": {
