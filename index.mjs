@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, delay } from 'baileys-whatsapp-api';
+import { makeWASocket, useMultiFileAuthState } from 'Baileys-whatsapp-api';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
