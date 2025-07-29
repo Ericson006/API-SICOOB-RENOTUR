@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, delay } from './node_modules/baileys-whatsapp-api/lib/index.js';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, delay } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
@@ -146,27 +146,52 @@ async function startBot() {
 
     sock = makeWASocket({
       auth: state,
-      version,
+      // 1. Controle de versão mais robusto
+      version: [2, 2413, 1], // Versão estável comprovada
       browser: ["Renotur", "Bot", "1.0"],
+      
+      // 2. Configurações avançadas de conexão
       markOnlineOnConnect: true,
-      connectTimeoutMs: 30_000,
-      keepAliveIntervalMs: 10_000,
-      logger,
-      // 3. Configurações adicionais para melhorar entrega (solução #3)
-      getMessage: async (key) => {
-        return {
-          conversation: 'mensagem armazenada'
-        };
-      },
+      connectTimeoutMs: 60_000, // Aumentado para 60s
+      keepAliveIntervalMs: 15_000, // Ping a cada 15s
+      defaultQueryTimeoutMs: 30_000, // Novo parâmetro importante
+      
+      // 3. Otimizações de mensagens
+      getMessage: async (key) => ({ 
+        conversation: 'mensagem armazenada' 
+      }),
       msgRetryCounterCache: new Map(),
+      maxMsgRetryCount: 5, // Novo: limite de retentativas
+      
+      // 4. Configurações de sincronização
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       shouldIgnoreJid: (jid) => false,
+      
+      // 5. Melhorias de entrega (específicas do fork)
+      fireInitQueries: true, // Novo: executa queries iniciais
       linkPreviewImageThumbnailWidth: 192,
       transactionOpts: {
-        maxCommitRetries: 10,
-        delayBetweenTriesMs: 3000
-      }
+        maxCommitRetries: 5, // Reduzido de 10 para 5
+        delayBetweenTriesMs: 2000 // Reduzido de 3000ms
+      },
+      
+      // 6. Logging aprimorado
+      logger: pino({
+        level: 'trace',
+        transport: {
+          target: 'pino-pretty',
+          options: { colorize: true }
+        }
+      }).child({ class: 'baileys' }),
+      
+      // 7. Novas opções de estabilidade
+      appStateMacVerification: {
+        patch: true,
+        snapshot: true
+      },
+      generateHighQualityLinkPreview: true,
+      validateConnection: true // Verifica conexão periodicamente
     });
     
     sock.ev.on('creds.update', saveCreds);
