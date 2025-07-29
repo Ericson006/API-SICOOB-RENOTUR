@@ -6,11 +6,13 @@
     "start": "node index.mjs",
     "build": "echo 'Building...'",
     "deploy": "npm install --prefer-offline && npm start"
+    "preinstall": "npm install -g npm@latest", 
+    "postinstall": "rm -rf node_modules/@whiskeysockets && npm install" 
   },
   "dependencies": {
     "pino": "^8.21.0",
     "@supabase/supabase-js": "^2.42.3",
-    "@reinaldocoelho/baileys-whatsapp-api": "git+https://github.com/reinaldocoelho/Baileys-whatsapp-api.git",
+    "@whiskeysockets/baileys": "github:souravkl11/baileys",
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "node-fetch": "^3.3.2",
