@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, delay } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
@@ -90,13 +90,59 @@ async function baixarAuthDoSupabase() {
   }
 }
 
+// Função para enviar mensagem com retry e verificação de entrega
+async function sendMessageWithRetry(jid, content, options = {}) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 2000;
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`📤 Tentativa ${attempt} de envio para ${jid}`);
+      
+      // 1. Forçar presença antes de enviar (solução #2)
+      await sock.presenceSubscribe(jid);
+      await delay(1500); // Esperar para estabilizar conexão
+      
+      // 2. Enviar a mensagem
+      const message = await sock.sendMessage(jid, content, {
+        ...options,
+        // 3. Habilitar opções de store e sync (solução #3)
+        messageStubParameters: [],
+        upload: true
+      });
+      
+      // Verificar se a mensagem foi realmente entregue
+      if (message?.key?.id) {
+        console.log(`✅ Mensagem enviada com ID: ${message.key.id}`);
+        return message;
+      }
+      
+      throw new Error('Mensagem enviada mas sem ID de confirmação');
+    } catch (error) {
+      console.error(`❌ Falha na tentativa ${attempt}:`, error.message);
+      
+      if (attempt < MAX_RETRIES) {
+        await delay(RETRY_DELAY_MS * attempt);
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
 async function startBot() {
   try {
     const authLoaded = await baixarAuthDoSupabase();
     if (!authLoaded) console.warn('⚠️ Continuando sem arquivos de autenticação');
 
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const { version } = await fetchLatestBaileysVersion(); // ✅ Corrigido
+    
+    // 4. Usar versão estável manualmente (solução #4)
+    const version = [2, 2413, 1]; // Versão estável conhecida
+    
+    // 5. Configurar logging detalhado (solução #5)
+    const logger = pino({ level: 'trace' }).child({ class: 'baileys' });
+    logger.level = 'debug';
 
     sock = makeWASocket({
       auth: state,
@@ -105,42 +151,71 @@ async function startBot() {
       markOnlineOnConnect: true,
       connectTimeoutMs: 30_000,
       keepAliveIntervalMs: 10_000,
-      logger: pino({ level: 'warn' }) // ✅ CORRETO AGORA
+      logger,
+      // 3. Configurações adicionais para melhorar entrega (solução #3)
+      getMessage: async (key) => {
+        return {
+          conversation: 'mensagem armazenada'
+        };
+      },
+      msgRetryCounterCache: new Map(),
+      syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
+      shouldIgnoreJid: (jid) => false,
+      linkPreviewImageThumbnailWidth: 192,
+      transactionOpts: {
+        maxCommitRetries: 10,
+        delayBetweenTriesMs: 3000
+      }
     });
+    
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
-    try {
-      const { connection, lastDisconnect, qr } = update;
+      try {
+        const { connection, lastDisconnect, qr } = update;
 
-      if (qr) {
-        ultimoQR = qr;
-        console.log('🆕 Novo QR Code gerado');
-        QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
-          if (!err) console.log(url);
-        });
-      }
-
-      if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
-
-        if (shouldReconnect && !reconectando) {
-          reconectando = true;
-          setTimeout(() => {
-            startBot().then(() => (reconectando = false));
-          }, 10000);
+        if (qr) {
+          ultimoQR = qr;
+          console.log('🆕 Novo QR Code gerado');
+          QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
+            if (!err) console.log(url);
+          });
         }
-      } else if (connection === 'open') {
-        console.log('✅ Conectado ao WhatsApp!');
-        iniciarPollingCobrancas();
+
+        if (connection === 'close') {
+          const statusCode = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.status;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+          console.log(`🔌 Conexão encerrada (código: ${statusCode}). ${shouldReconnect ? 'Reconectando...' : 'Faça login novamente'}`);
+
+          if (shouldReconnect && !reconectando) {
+            reconectando = true;
+            setTimeout(() => {
+              startBot().then(() => (reconectando = false));
+            }, 10000);
+          }
+        } else if (connection === 'open') {
+          console.log('✅ Conectado ao WhatsApp!');
+          iniciarPollingCobrancas();
+        }
+      } catch (err) {
+        console.error('Erro no connection.update:', err.message);
       }
-    } catch (err) {
-      console.error('Erro no connection.update:', err.message);
-    }
-  });
+    });
+
+    // Monitorar eventos de mensagens para debug
+    sock.ev.on('messages.upsert', ({ messages }) => {
+      logger.debug('messages.upsert', messages);
+    });
+    
+    sock.ev.on('messages.update', (updates) => {
+      updates.forEach(update => {
+        if (update.update?.status) {
+          logger.debug(`Mensagem ${update.key.id} atualizada para status: ${update.update.status}`);
+        }
+      });
+    });
 
     return sock;
   } catch (error) {
@@ -268,19 +343,32 @@ async function processarCobranca(cobranca) {
     const mensagem = cobranca.mensagem_confirmacao || 
       `✅ Pagamento confirmado!\n💵 Valor: R$${valorFormatado}\n📅 Data: ${new Date(cobranca.created_at || new Date()).toLocaleString('pt-BR')}`;
 
-    await sock.sendMessage(numeroWhatsapp, { text: mensagem });
+    // Usar a nova função com retry automático
+    await sendMessageWithRetry(numeroWhatsapp, { text: mensagem });
 
     console.log('\n💾 Atualizando status...');
-    await supabase.from('cobrancas')
-      .update({ mensagem_enviada: true, data_envio: new Date().toISOString() })
+    const { error } = await supabase.from('cobrancas')
+      .update({ 
+        mensagem_enviada: true, 
+        data_envio: new Date().toISOString(),
+        ultima_atualizacao: new Date().toISOString()
+      })
       .eq('txid', cobranca.txid);
+
+    if (error) throw error;
 
     console.log('✅ Processamento completo');
   } catch (error) {
     console.error('\n❌ FALHA CRÍTICA:', error.message);
-    await supabase.from('cobrancas')
-      .update({ mensagem_enviada: false })
+    const { error: updateError } = await supabase.from('cobrancas')
+      .update({ 
+        mensagem_enviada: false,
+        ultima_atualizacao: new Date().toISOString(),
+        erro_envio: error.message.substring(0, 255)
+      })
       .eq('txid', cobranca.txid);
+    
+    if (updateError) console.error('Erro ao atualizar status de falha:', updateError.message);
   } finally {
     console.log(`⏱️ Tempo total: ${(new Date() - inicioProcessamento)}ms`);
   }
