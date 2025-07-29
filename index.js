@@ -9,7 +9,8 @@ import { createClient } from '@supabase/supabase-js';
 import express from 'express';
 import QRCode from 'qrcode';
 import pino from 'pino';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import whatsappPkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = whatsappPkg;
 
 // Configuração de paths
 const __filename = fileURLToPath(import.meta.url);
