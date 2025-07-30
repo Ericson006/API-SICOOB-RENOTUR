@@ -10,6 +10,7 @@ import express from 'express';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import whatsappPkg from 'whatsapp-web.js';
+import puppeteer from 'puppeteer';
 const { Client, LocalAuth } = whatsappPkg;
 
 // Configuração de paths
@@ -115,7 +116,7 @@ async function sendMessageWithRetry(chatId, content) {
 // ==============================================
 
 function startBot() {
-  client = new Client({
+ client = new Client({
     authStrategy: new LocalAuth({ 
       clientId: "bot",
       dataPath: authFolder
@@ -128,13 +129,14 @@ function startBot() {
         '--disable-dev-shm-usage',
         '--single-process'
       ],
-      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser'
+      executablePath: await puppeteer.executablePath() // <-- ALTERADO AQUI
     },
     webVersionCache: {
       type: 'remote',
       remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
     }
   });
+
 
   client.on('qr', (qr) => {
     ultimoQR = qr;
