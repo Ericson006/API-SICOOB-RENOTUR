@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node --optimize-for-size --max-old-space-size=480 index.js",
+    "postinstall": "npx puppeteer browsers install chrome",
     "clean": "rm -rf auth sessions && mkdir auth sessions"
   },
   "dependencies": {
@@ -13,6 +14,7 @@
     "pino": "^8.17.0",
     "qrcode": "^1.5.3",
     "whatsapp-web.js": "^1.24.2",
+    "puppeteer": "^22.0.0",
     "puppeteer-core": "^22.0.0"
   },
   "engines": {
