@@ -115,7 +115,7 @@ async function sendMessageWithRetry(chatId, content) {
 // INICIALIZAÇÃO DO WHATSAPP
 // ==============================================
 
-function startBot() {
+async function startBot() {
  client = new Client({
     authStrategy: new LocalAuth({ 
       clientId: "bot",
