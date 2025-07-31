@@ -129,7 +129,7 @@ async function startBot() {
         '--disable-dev-shm-usage',
         '--single-process'
       ],
-      executablePath: await puppeteer.executablePath() // <-- ALTERADO AQUI
+      executablePath: process.env.CHROMIUM_PATH
     },
     webVersionCache: {
       type: 'remote',
