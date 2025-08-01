@@ -122,7 +122,6 @@ async function startBot() {
       dataPath: authFolder
     }),
     puppeteer: {
-      executablePath: '/snap/bin/chromium',
       headless: 'new',               // usa o novo modo headless
       args: [
         '--no-sandbox',
