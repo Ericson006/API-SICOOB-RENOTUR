@@ -127,7 +127,6 @@ async function startBot() {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--single-process'
       ],
       executablePath: '/usr/bin/chromium-browser' 
     },
