@@ -129,7 +129,7 @@ async function startBot() {
         '--disable-dev-shm-usage',
         '--single-process'
       ],
-      executablePath: process.env.CHROMIUM_PATH
+      executablePath: '/usr/bin/chromium-browser' 
     },
     webVersionCache: {
       type: 'remote',
