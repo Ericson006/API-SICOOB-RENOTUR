@@ -128,7 +128,7 @@ async function startBot() {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
       ],
-      executablePath: '/usr/bin/chromium-browser' 
+      executablePath: '/snap/bin/chromium' 
     },
     webVersionCache: {
       type: 'remote',
