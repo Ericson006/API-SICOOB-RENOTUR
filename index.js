@@ -116,19 +116,23 @@ async function sendMessageWithRetry(chatId, content) {
 // ==============================================
 
 async function startBot() {
- client = new Client({
-    authStrategy: new LocalAuth({ 
+  client = new Client({
+    authStrategy: new LocalAuth({
       clientId: "bot",
       dataPath: authFolder
     }),
-    puppeteer: { 
-      headless: true,
+    puppeteer: {
+      executablePath: '/snap/bin/chromium',
+      headless: 'new',               // usa o novo modo headless
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
+        '--disable-extensions',
+        '--disable-gpu',
+        '--disable-software-rasterizer'
       ],
-      executablePath: '/snap/bin/chromium' 
+      timeout: 120000                // 120s de espera para conectar ao browser
     },
     webVersionCache: {
       type: 'remote',
@@ -136,8 +140,7 @@ async function startBot() {
     }
   });
 
-
-  client.on('qr', (qr) => {
+  client.on('qr', qr => {
     ultimoQR = qr;
     logger.info('QR Code gerado');
     QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
@@ -150,7 +153,7 @@ async function startBot() {
     iniciarPollingCobrancas();
   });
 
-  client.on('disconnected', (reason) => {
+  client.on('disconnected', reason => {
     logger.warn('Desconectado: %s', reason);
     if (!reconectando) {
       reconectando = true;
@@ -161,7 +164,7 @@ async function startBot() {
     }
   });
 
-  client.initialize();
+  await client.initialize();
 }
 
 // ==============================================
