@@ -127,9 +127,12 @@ async function startBot() {
     }
   }
 
-  // Limpa perfil antigo
-  await fs.rm(profileDir, { recursive: true, force: true });
-  await fs.mkdir(profileDir, { recursive: true });
+  // Garante que a pasta do profile exista (não apaga ela mais)
+  try {
+    await fs.mkdir(profileDir, { recursive: true });
+  } catch (err) {
+    logger.warn('Erro ao garantir profileDir: %s', err.message);
+  }
 
   logger.info('🚀 Iniciando cliente WhatsApp...');
   client = new Client({
@@ -158,7 +161,6 @@ async function startBot() {
     }
   });
 
-  // Eventos dentro da função
   client.on('qr', qr => {
     ultimoQR = qr;
     logger.info('QR Code gerado, aguardando leitura...');
@@ -172,13 +174,20 @@ async function startBot() {
     iniciarPollingCobrancas();
   });
 
-  client.on('disconnected', reason => {
+  client.on('disconnected', async reason => {
     logger.warn('⚠️ Desconectado: %s', reason);
-    if (!reconectando) {
-      reconectando = true;
+    if (reason === 'LOGOUT') {
+      logger.info('Sessão desconectada por logout. Limpando sessão local...');
+      try {
+        await fs.rm(authFolder, { recursive: true, force: true });
+      } catch (err) {
+        logger.error('Erro ao limpar authFolder: %s', err.message);
+      }
+      startBot();
+    } else {
+      // Outros motivos de desconexão: tenta reconectar depois de 10s
       setTimeout(() => {
         startBot();
-        reconectando = false;
       }, 10000);
     }
   });
@@ -188,7 +197,7 @@ async function startBot() {
     logger.info('📡 Inicialização do cliente concluída');
   } catch (err) {
     logger.error('Erro ao inicializar cliente: %s', err.message);
-    setTimeout(() => startBot(), 15000); // tenta de novo em 15s
+    setTimeout(() => startBot(), 15000);
   }
 }
 // ==============================================
