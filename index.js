@@ -116,13 +116,24 @@ async function sendMessageWithRetry(chatId, content) {
 // ==============================================
 
 async function startBot() {
+  if (client) {
+    try {
+      await client.destroy();
+      logger.info('🧹 Cliente antigo destruído antes de reiniciar');
+    } catch (e) {
+      logger.warn('Falha ao destruir cliente anterior: %s', e.message);
+    }
+  }
+
+  logger.info('🚀 Iniciando cliente WhatsApp...');
   client = new Client({
     authStrategy: new LocalAuth({
       clientId: "bot",
       dataPath: authFolder
     }),
     puppeteer: {
-      headless: 'new',               // usa o novo modo headless
+      headless: 'new',
+      executablePath: process.env.CHROMIUM_PATH || '/snap/bin/chromium',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -131,7 +142,7 @@ async function startBot() {
         '--disable-gpu',
         '--disable-software-rasterizer'
       ],
-      timeout: 120000                // 120s de espera para conectar ao browser
+      timeout: 120000
     },
     webVersionCache: {
       type: 'remote',
@@ -141,19 +152,19 @@ async function startBot() {
 
   client.on('qr', qr => {
     ultimoQR = qr;
-    logger.info('QR Code gerado');
+    logger.info('QR Code gerado, aguardando leitura...');
     QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
       if (!err) console.log(url);
     });
   });
 
   client.on('ready', () => {
-    logger.warn('✅ Bot pronto!');
+    logger.warn('✅ Bot pronto e conectado!');
     iniciarPollingCobrancas();
   });
 
   client.on('disconnected', reason => {
-    logger.warn('Desconectado: %s', reason);
+    logger.warn('⚠️ Desconectado: %s', reason);
     if (!reconectando) {
       reconectando = true;
       setTimeout(() => {
@@ -163,7 +174,13 @@ async function startBot() {
     }
   });
 
-  await client.initialize();
+  try {
+    await client.initialize();
+    logger.info('📡 Inicialização do cliente concluída');
+  } catch (err) {
+    logger.error('Erro ao inicializar cliente: %s', err.message);
+    setTimeout(() => startBot(), 15000); // tenta de novo em 15s
+  }
 }
 
 // ==============================================
