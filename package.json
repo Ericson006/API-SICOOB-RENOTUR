@@ -1,12 +1,12 @@
 {
-  "name": "whatsapp-bot",
-  "version": "2.0.0",
+  "name": "whatsapp-bot-pro",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "start": "node --optimize-for-size --max-old-space-size=512 index.js",
     "dev": "nodemon index.js",
     "clean": "rm -rf auth sessions node_modules package-lock.json",
-    "fix-deps": "npm install --force && npm audit fix --force"
+    "postinstall": "npm audit fix --force"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
@@ -21,6 +21,10 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "overrides": {
+    "glob": "^10.3.10",
+    "puppeteer": "^22.11.0"
   },
   "engines": {
     "node": ">=18.0.0",
