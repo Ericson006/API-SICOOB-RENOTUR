@@ -116,7 +116,9 @@ async function sendMessageWithRetry(chatId, content) {
 // ==============================================
 
 async function startBot() {
-  if (client) {
+  const profileDir = `${authFolder}/chrome_profile_bot`;
+
+  if (client?.ws) {
     try {
       await client.destroy();
       logger.info('🧹 Cliente antigo destruído antes de reiniciar');
@@ -124,6 +126,10 @@ async function startBot() {
       logger.warn('Falha ao destruir cliente anterior: %s', e.message);
     }
   }
+
+  // Limpa perfil antigo
+  await fs.rm(profileDir, { recursive: true, force: true });
+  await fs.mkdir(profileDir, { recursive: true });
 
   logger.info('🚀 Iniciando cliente WhatsApp...');
   client = new Client({
@@ -135,14 +141,14 @@ async function startBot() {
       headless: 'new',
       executablePath: '/usr/bin/chromium-browser',
       args: [
+        `--user-data-dir=${profileDir}`,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-extensions',
         '--disable-gpu',
         '--disable-software-rasterizer',
-        '--remote-debugging-port=9222',
-        '--user-data-dir=/tmp/puppeteer_profile'
+        '--remote-debugging-port=9222'
       ],
       timeout: 120000
     },
@@ -151,8 +157,8 @@ async function startBot() {
       remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
     }
   });
-}
 
+  // Eventos dentro da função
   client.on('qr', qr => {
     ultimoQR = qr;
     logger.info('QR Code gerado, aguardando leitura...');
@@ -185,7 +191,6 @@ async function startBot() {
     setTimeout(() => startBot(), 15000); // tenta de novo em 15s
   }
 }
-
 // ==============================================
 // SISTEMA DE POLLING
 // ==============================================
