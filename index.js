@@ -21,8 +21,8 @@ const __dirname = dirname(__filename);
 dotenv.config();
 
 // Verificação das variáveis de ambiente
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-  console.error('❌ SUPABASE_URL e SUPABASE_KEY são obrigatórios');
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY || !process.env.CHROMIUM_PATH) {
+  console.error('❌ SUPABASE_URL, SUPABASE_KEY e CHROMIUM_PATH são obrigatórios');
   process.exit(1);
 }
 
@@ -41,11 +41,15 @@ const bucket = 'auth-session';
 
 // Configuração do logger
 const logger = pino({
-  level: 'info',
-  formatters: {
-    level: (label) => ({ level: label })
-  },
-  timestamp: () => `,"time":"${new Date().toISOString()}"`
+  level: 'debug', // Aumentado para debug para mais informações
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'SYS:dd-mm-yyyy HH:MM:ss',
+      ignore: 'pid,hostname'
+    }
+  }
 });
 
 // Variáveis globais
@@ -61,236 +65,143 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // ==============================================
-// FUNÇÕES PRINCIPAIS
+// FUNÇÕES PRINCIPAIS (ATUALIZADAS)
 // ==============================================
 
-async function baixarAuthDoSupabase() {
-  logger.info('Baixando auth do Supabase...');
+async function limparSessaoAntiga() {
   try {
+    logger.info('Limpando sessão anterior...');
+    await fs.rm(authFolder, { recursive: true, force: true });
     await fs.mkdir(authFolder, { recursive: true });
-    
-    const { data: files, error } = await supabase.storage
-      .from(bucket)
-      .list('', { limit: 100 });
+    logger.info('Sessão limpa com sucesso');
+  } catch (error) {
+    logger.error('Erro ao limpar sessão: %s', error.message);
+  }
+}
 
-    if (error) throw error;
-
-    for (const file of files) {
-      if (file.name.startsWith('.tmp')) continue;
-      
-      const { data: signedUrl } = await supabase.storage
-        .from(bucket)
-        .createSignedUrl(file.name, 3600);
-      
-      const res = await fetch(signedUrl.signedUrl);
-      await fs.writeFile(`${authFolder}/${file.name}`, Buffer.from(await res.arrayBuffer()));
-    }
+async function verificarInstalacaoChromium() {
+  try {
+    const browser = await puppeteer.launch({
+      executablePath: process.env.CHROMIUM_PATH,
+      headless: true,
+      args: ['--no-sandbox']
+    });
+    await browser.close();
+    logger.info('Chromium verificado com sucesso');
     return true;
   } catch (error) {
-    logger.error('Erro ao baixar auth: %s', error.message);
+    logger.error('Falha ao verificar Chromium: %s', error.message);
     return false;
   }
 }
 
-async function sendMessageWithRetry(chatId, content) {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 2000;
-  
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const message = await client.sendMessage(chatId, content);
-      logger.info('Mensagem enviada para %s', chatId);
-      return message;
-    } catch (error) {
-      if (attempt === MAX_RETRIES) {
-        logger.error('Falha ao enviar mensagem após %d tentativas: %s', MAX_RETRIES, error.message);
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
-    }
-  }
-}
-
-// ==============================================
-// INICIALIZAÇÃO DO WHATSAPP
-// ==============================================
-
 async function startBot() {
-  const profileDir = `${authFolder}/chrome_profile_bot`;
-
-  if (client?.ws) {
-    try {
-      await client.destroy();
-      logger.info('🧹 Cliente antigo destruído antes de reiniciar');
-    } catch (e) {
-      logger.warn('Falha ao destruir cliente anterior: %s', e.message);
-    }
+  // Verificar Chromium antes de iniciar
+  if (!await verificarInstalacaoChromium()) {
+    logger.error('Chromium não está funcionando corretamente');
+    setTimeout(startBot, 30000);
+    return;
   }
 
-  // Garante que a pasta do profile exista (não apaga ela mais)
-  try {
-    await fs.mkdir(profileDir, { recursive: true });
-  } catch (err) {
-    logger.warn('Erro ao garantir profileDir: %s', err.message);
+  // Limpar sessão antiga se estiver reconectando
+  if (reconectando) {
+    await limparSessaoAntiga();
+    reconectando = false;
   }
 
   logger.info('🚀 Iniciando cliente WhatsApp...');
-  client = new Client({
-    authStrategy: new LocalAuth({
-      clientId: "bot",
-      dataPath: authFolder
-    }),
-    puppeteer: {
-      headless: 'new',
-      executablePath: '/usr/bin/chromium-browser',
-      args: [
-        `--user-data-dir=${profileDir}`,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--remote-debugging-port=9222'
-      ],
-      timeout: 120000
-    },
-    webVersionCache: {
-      type: 'remote',
-      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
-    }
-  });
-
-  client.on('qr', qr => {
-    ultimoQR = qr;
-    logger.info('QR Code gerado, aguardando leitura...');
-    QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
-      if (!err) console.log(url);
-    });
-  });
-
-  client.on('ready', () => {
-    logger.warn('✅ Bot pronto e conectado!');
-    iniciarPollingCobrancas();
-  });
-
-  client.on('disconnected', async reason => {
-    logger.warn('⚠️ Desconectado: %s', reason);
-    if (reason === 'LOGOUT') {
-      logger.info('Sessão desconectada por logout. Limpando sessão local...');
-      try {
-        await fs.rm(authFolder, { recursive: true, force: true });
-      } catch (err) {
-        logger.error('Erro ao limpar authFolder: %s', err.message);
-      }
-      startBot();
-    } else {
-      // Outros motivos de desconexão: tenta reconectar depois de 10s
-      setTimeout(() => {
-        startBot();
-      }, 10000);
-    }
-  });
-
+  
   try {
+    client = new Client({
+      authStrategy: new LocalAuth({
+        clientId: "bot",
+        dataPath: authFolder
+      }),
+      puppeteer: {
+        headless: 'new',
+        executablePath: process.env.CHROMIUM_PATH,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-extensions',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--remote-debugging-port=9222'
+        ],
+        timeout: 180000,
+        dumpio: true // Para logs detalhados
+      },
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1013006690.html'
+      }
+    });
+
+    // Eventos do WhatsApp (ATUALIZADOS)
+    client.on('qr', async qr => {
+      ultimoQR = qr;
+      logger.info('QR Code gerado, aguardando leitura...');
+      QRCode.toString(qr, { type: 'terminal' }, (err, url) => {
+        if (!err) console.log(url);
+      });
+    });
+
+    client.on('authenticated', () => {
+      logger.info('Autenticado com sucesso!');
+    });
+
+    client.on('auth_failure', msg => {
+      logger.error('Falha na autenticação: %s', msg);
+      reconectando = true;
+    });
+
+    client.on('loading_screen', (percent, message) => {
+      logger.debug('Carregando: %s (%s%)', message, percent);
+    });
+
+    client.on('ready', () => {
+      logger.warn('✅ Bot pronto e conectado!');
+      iniciarPollingCobrancas();
+    });
+
+    client.on('disconnected', async reason => {
+      logger.warn('⚠️ Desconectado: %s', reason);
+      reconectando = true;
+      setTimeout(() => startBot(), 10000);
+    });
+
     await client.initialize();
-    logger.info('📡 Inicialização do cliente concluída');
+    logger.info('📡 Cliente inicializado com sucesso');
+
   } catch (err) {
     logger.error('Erro ao inicializar cliente: %s', err.message);
     setTimeout(() => startBot(), 15000);
   }
 }
-// ==============================================
-// SISTEMA DE POLLING
-// ==============================================
-
-function iniciarPollingCobrancas() {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(verificarCobrancasPendentes, 20000);
-  verificarCobrancasPendentes();
-}
-
-async function verificarCobrancasPendentes() {
-  if (!client || !client.info) return;
-  
-  contadorPolling++;
-  const horaInicio = new Date();
-  logger.info('Verificação %d iniciada', contadorPolling);
-
-  try {
-    const { data: cobrancas, error } = await supabase
-      .from('cobrancas')
-      .select('*')
-      .or('status.eq.concluido,status.eq.Concluído,status.eq.CONCLUIDO,status.eq.PAGO')
-      .or('mensagem_enviada.eq.false,mensagem_enviada.is.null')
-      .not('telefone_cliente', 'is', null)
-      .limit(10);
-
-    if (error) throw error;
-
-    if (cobrancas?.length > 0) {
-      logger.info('Processando %d cobranças', cobrancas.length);
-      for (const cobranca of cobrancas) {
-        await processarCobranca(cobranca);
-      }
-    }
-  } catch (error) {
-    logger.error('Erro no polling: %s', error.message);
-  } finally {
-    logger.info('Tempo da verificação: %dms', (new Date() - horaInicio));
-  }
-}
-
-async function processarCobranca(cobranca) {
-  try {
-    let telefone = String(cobranca.telefone_cliente).replace(/\D/g, '');
-    
-    // Ajuste para números de SP com 10 dígitos
-    if (telefone.length === 10 && telefone.startsWith('11')) {
-      telefone = telefone.substring(0, 2) + '9' + telefone.substring(2);
-    }
-    
-    if (telefone.length < 11) {
-      throw new Error(`Telefone inválido: ${telefone}`);
-    }
-    
-    const chatId = `55${telefone}@c.us`;
-    const valorFormatado = cobranca.valor.toFixed(2).replace('.', ',');
-    const mensagem = cobranca.mensagem_confirmacao || 
-      `✅ Pagamento confirmado!\n💵 Valor: R$${valorFormatado}\n📅 Data: ${new Date().toLocaleString('pt-BR')}`;
-
-    await sendMessageWithRetry(chatId, mensagem);
-
-    await supabase.from('cobrancas')
-      .update({ 
-        mensagem_enviada: true,
-        data_envio: new Date().toISOString(),
-        ultima_atualizacao: new Date().toISOString()
-      })
-      .eq('txid', cobranca.txid);
-
-    logger.info('Cobrança %s processada com sucesso', cobranca.txid);
-  } catch (error) {
-    logger.error('Erro ao processar cobrança: %s', error.message);
-    
-    await supabase.from('cobrancas')
-      .update({ 
-        erro_envio: error.message.substring(0, 255),
-        ultima_atualizacao: new Date().toISOString()
-      })
-      .eq('txid', cobranca.txid);
-  }
-}
 
 // ==============================================
-// ROTAS HTTP
+// ROTAS HTTP (ATUALIZADAS)
 // ==============================================
 
-app.get('/health', (req, res) => res.status(200).send('OK'));
+app.get('/health', (req, res) => res.status(200).json({ 
+  status: 'OK',
+  connected: client?.info ? true : false
+}));
 
-app.get('/qr', (req, res) => {
+app.get('/qr', async (req, res) => {
   if (!ultimoQR) return res.status(404).json({ error: 'QR não disponível' });
-  res.json({ qr: ultimoQR });
+  
+  try {
+    const qrImage = await QRCode.toDataURL(ultimoQR);
+    res.json({ 
+      qr: ultimoQR,
+      qrImage: qrImage,
+      status: client?.info ? 'connected' : 'waiting'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao gerar QR' });
+  }
 });
 
 app.get('/', async (req, res) => {
@@ -305,43 +216,55 @@ app.get('/', async (req, res) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-            img { max-width: 100%; height: auto; }
+            img { max-width: 300px; height: auto; margin: 20px auto; display: block; }
+            .status { padding: 10px; margin: 20px; border-radius: 5px; }
+            .connected { background: #4CAF50; color: white; }
+            .disconnected { background: #F44336; color: white; }
           </style>
         </head>
         <body>
           <h1>📲 Conecte o WhatsApp</h1>
           <img src="${qrImage}" alt="QR Code" />
-          <p>Status: ${client?.info ? '✅ Conectado' : '❌ Aguardando conexão'}</p>
+          <div class="status ${client?.info ? 'connected' : 'disconnected'}">
+            Status: ${client?.info ? '✅ Conectado' : '❌ Aguardando conexão'}
+          </div>
+          ${!client?.info ? '<p>Escaneie o QR code pelo app do WhatsApp > Dispositivos vinculados</p>' : ''}
         </body>
       </html>
     `);
   } catch (error) {
-    res.status(500).send('Erro ao gerar QR');
+    res.status(500).send('Erro ao gerar página');
   }
 });
 
 // ==============================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO (ATUALIZADA)
 // ==============================================
 
-app.listen(PORT, () => {
-  logger.info(`Servidor rodando na porta ${PORT}`);
-  
-  // Monitor de memória
-  setInterval(() => {
-    const used = process.memoryUsage().heapUsed / 1024 / 1024;
-    logger.info('Uso de memória: %.2fMB', used);
+async function main() {
+  try {
+    // Verificar e criar pasta auth
+    await fs.mkdir(authFolder, { recursive: true });
     
-    if (used > 450) {
-      logger.warn('⚠️ ALERTA: Uso alto de memória!');
-    }
-  }, 60000);
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      logger.info(`Servidor rodando na porta ${PORT}`);
+      
+      // Monitor de memória
+      setInterval(() => {
+        const used = process.memoryUsage().heapUsed / 1024 / 1024;
+        logger.debug('Uso de memória: %.2fMB', used);
+      }, 60000);
 
-  // Inicia o bot
-  baixarAuthDoSupabase()
-    .then(() => startBot())
-    .catch(err => logger.error('Erro ao iniciar bot: %s', err.message));
-});
+      // Iniciar bot
+      startBot();
+    });
+
+  } catch (err) {
+    logger.error('Erro na inicialização: %s', err.message);
+    process.exit(1);
+  }
+}
 
 // Gerenciamento de desligamento
 process.on('SIGINT', async () => {
@@ -356,3 +279,6 @@ process.on('SIGINT', async () => {
   
   process.exit(0);
 });
+
+// Iniciar aplicação
+main();
