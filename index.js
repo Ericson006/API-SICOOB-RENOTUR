@@ -140,7 +140,9 @@ async function startBot() {
         '--disable-dev-shm-usage',
         '--disable-extensions',
         '--disable-gpu',
-        '--disable-software-rasterizer'
+        '--disable-software-rasterizer',
+        '--remote-debugging-port=9222',
+        '--user-data-dir=/tmp/puppeteer_profile'
       ],
       timeout: 120000
     },
@@ -149,6 +151,7 @@ async function startBot() {
       remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
     }
   });
+}
 
   client.on('qr', qr => {
     ultimoQR = qr;
