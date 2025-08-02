@@ -133,7 +133,7 @@ async function startBot() {
     }),
     puppeteer: {
       headless: 'new',
-      executablePath: process.env.CHROMIUM_PATH || '/snap/bin/chromium',
+      executablePath: '/usr/bin/chromium-browser',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
