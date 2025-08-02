@@ -1,22 +1,28 @@
 {
-  "name": "whatsapp-bot-leve",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node --optimize-for-size --max-old-space-size=480 index.js",
-    "clean": "rm -rf auth sessions && mkdir auth sessions"
+    "start": "node --optimize-for-size --max-old-space-size=512 index.js",
+    "dev": "nodemon --watch . --ext js --exec node --optimize-for-size index.js",
+    "clean": "rm -rf auth sessions && mkdir auth sessions",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "fix": "rm -rf auth && npm run start"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.3",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "pino": "^8.17.0",
+    "pino-pretty": "^10.2.3",
     "qrcode": "^1.5.3",
     "whatsapp-web.js": "^1.24.2",
     "puppeteer": "^22.15.0"
   },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  }
-}
+  },
