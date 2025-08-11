@@ -1,7 +1,7 @@
-
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs/promises';
+import pino from 'pino';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import express from 'express';
