@@ -13,7 +13,7 @@ CLIENT_ID = "86849d09-141d-4c35-8e67-ca0ba9b0073a"
 TOKEN_URL = "https://auth.sicoob.com.br/auth/realms/cooperado/protocol/openid-connect/token"
 COB_URL = "https://api.sicoob.com.br/pix/api/v2/cob"
 WEBHOOK_MANAGE_URL = "https://api.sicoob.com.br/pix/api/v2/webhook"
-CHAVE_PIX = "04763318000185"
+CHAVE_PIX = "f0168725-d3bb-4c24-b755-d5478b104528"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
@@ -201,3 +201,4 @@ def webhook_pix():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+
